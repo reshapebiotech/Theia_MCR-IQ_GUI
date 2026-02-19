@@ -1,0 +1,9 @@
+{
+  "links": [
+    {"desc": "Lens IQ GUI setup instructions", "URL": "https://theiatech.com/LensIQ-setup"},
+    {"desc": "Lens IQ video tutorial", "URL": ""},
+    {"desc": "Lens IQ BFL calibration video tutorial", "URL": ""},
+    {"desc": "Lens IQ dataset cloud", "URL": "https://theiatech.com/IQdataset"},
+    {"desc": "Contact Theia for support", "URL": "https://theiatech.com/about/contact/"}
+  ]
+}
