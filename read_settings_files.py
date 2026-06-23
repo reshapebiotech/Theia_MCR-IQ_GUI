@@ -33,26 +33,36 @@ def readSettingsFile(settingsFileName:str) -> sg.UserSettings:
 # read lens data file
 def readUserDataFile(lensDataFileName:str) -> dict | None:
     '''
-    Read the lens data file from the AppData/local folder/data.  
+    Read the lens data file.
+    Priority order:
+    1) Environment data folder (dev workspace data/ or bundled exe data/)
+    2) AppData/local fallback copy
+    3) User-selected file (copied to AppData/local)
     ### return:  
     [lens data]
     '''
     userData = None
     appDir = os.path.join(utilities.getUserDir(), 'data')
     lensDataFullFileName = os.path.join(appDir, lensDataFileName)
-    if not os.path.exists(lensDataFullFileName):
-        log.warning(f'No data file in {lensDataFullFileName}.  Find the "{lensDataFileName}" file. ')
-        # Open the data file and save to appDir
-        Tk().withdraw() 
-        filename = askopenfilename(defaultextension='.json', filetypes=[('JSON File', '.json')], title=f"Open {lensDataFileName} file")
-        if filename:
-            with open(filename, 'r') as f:
+    envDataFullFileName = utilities.resourcePath(os.path.join('data', lensDataFileName))
+
+    for candidate in [envDataFullFileName, lensDataFullFileName]:
+        if os.path.exists(candidate):
+            with open(candidate, 'r') as f:
                 userData = json.load(f)
-            os.makedirs(appDir, exist_ok=True)
-            with open(lensDataFullFileName, 'w') as f:
-                json.dump(userData, f)
-        else: 
-            return None
+            log.info(f'Loaded lens data from {candidate}')
+            return userData
+
+    log.warning(f'No data file found in {envDataFullFileName} or {lensDataFullFileName}. Find the "{lensDataFileName}" file.')
+    # Open the data file and save to appDir
+    Tk().withdraw() 
+    filename = askopenfilename(defaultextension='.json', filetypes=[('JSON File', '.json')], title=f"Open {lensDataFileName} file")
+    if filename:
+        with open(filename, 'r') as f:
+            userData = json.load(f)
+        os.makedirs(appDir, exist_ok=True)
+        with open(lensDataFullFileName, 'w') as f:
+            json.dump(userData, f)
     else:
-        userData = json.load(open(lensDataFullFileName))
+        return None
     return userData

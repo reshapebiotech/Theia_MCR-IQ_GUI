@@ -1,4 +1,8 @@
 # Revision history 
+v.3.2.0 260519 (limits.json) reorganized schema for simplification
+                Added lens functionality check regarding available GUI buttons 
+                bug: motor home speed saving typo
+                AI updated readme.md file for accuracy and readability
 v.3.1.0 Changed from PySimpleGUI (no longer supported) to FreeSimpleGUI
                 removed PySimpleGUI license requirement
     v.3.0.4 added timeout for incorrectly connected com ports

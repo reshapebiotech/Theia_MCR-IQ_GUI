@@ -66,7 +66,7 @@ def mainGUILayout():
     # initialize motor control sub-frame
     initMotorsFrame = [
         [sg.Button('Initialize program\nand home motors', size=(14,2), key='motorInitHomeBtn'),
-            sg.Button('Initialize program\nonly', size=(14,2), key='motorInitBtn'),
+            sg.Button('Initialize without\nmoving motors', size=(14,2), key='motorInitBtn'),
             sg.Frame('Status', [[sg.Text('', key='fldStatus', size=(12,1), justification='center')]]) ]
         ]
     # lens header including picture and setup functions
@@ -103,14 +103,15 @@ def mainGUILayout():
     # lens IQ frames
     lensIQFileFrame = [
         [sg.Checkbox('Lens IQ or calibrated lens was purchased from Theia and data file was downloaded.', key='lensIQCheckbox', default=False, enable_events=True)],
-        [sg.Text('Data file:', key='calFileText', visible=False), sg.Input('Select...', key='calFile', disabled=True, size=(30,1), visible=False), 
-                sg.Input('', key='calFileFull', visible=False, enable_events=True), 
-                sg.FileBrowse('Browse', file_types=([('*.json', '*.json')]), key='calFileBrowse', visible=False)]
+        [sg.pin(sg.Text('Data file:', key='calFileText', visible=False)),
+            sg.pin(sg.Input('Select...', key='calFile', disabled=True, size=(30,1), visible=False)),
+            sg.pin(sg.Input('', key='calFileFull', visible=False, enable_events=True)),
+            sg.pin(sg.FileBrowse('Browse', file_types=([('*.json', '*.json')]), key='calFileBrowse', target='calFileFull', visible=False))]
         ]
     lensIQLayoutFrame = lensIQGUILayout()
     lensIQFrame = [
         [sg.Column(lensIQFileFrame, expand_x=True)],
-        [sg.Column(lensIQLayoutFrame, expand_x=True, visible=False, key='lensIQControlFrame')]
+        [sg.pin(sg.Column(lensIQLayoutFrame, expand_x=True, visible=False, key='lensIQControlFrame'))]
     ]
                 
     # overall layout
@@ -388,7 +389,7 @@ def settingsGUI(initialProtocol:str, MCR, GUIActions, position:tuple[int, int]) 
         window['cp_limitCheck'].update(GUIActions.regardLimits)
 
     while True:
-        event, values = window.read()
+        event, values = window.read() # type: ignore
         if event in {sg.WIN_CLOSED, 'save', 'discard'}:
             break
         elif event == 'changePath':
@@ -423,7 +424,7 @@ def helpPopup(position:tuple[int, int]):
         help.hyperlink(window=window, fieldKey=f'LINK{n}')
 
     while True:
-        event, values = window.read()
+        event, values = window.read() # type: ignore
         if event in {sg.WIN_CLOSED, 'Close'}:
             break
     

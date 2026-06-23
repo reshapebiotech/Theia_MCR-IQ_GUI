@@ -40,7 +40,7 @@ class GUIActions:
 
         # relative movement buttons
         componentList = ['moveTeleBtn', 'moveWideBtn', 'moveNearBtn', 'moveFarBtn', 'moveOpenBtn', 'moveCloseBtn', 
-                         'zoomCurFld', 'focusCurFld', 'irisCurFld', 'zoomStepFld', 'focusStepFld', 'irisStepFld', 'IRCBtn1', 'IRCBtn2']
+                         'zoomCurFld', 'focusCurFld', 'irisCurFld', 'zoomStepFld', 'focusStepFld', 'irisStepFld']
         for component in componentList:
             self.GUIWindow[component].update(disabled = not enable)
 
@@ -61,6 +61,31 @@ class GUIActions:
         componentList = ['moveZoomAbsBtn', 'moveFocusAbsBtn', 'moveIrisAbsBtn']
         for component in componentList:
             self.GUIWindow[component].update(disabled = not enable)
+        return
+
+    # enableLiveFrameIRC
+    def enableLiveFrameIRC(self, enable:bool=True):
+        '''
+        Enable IRC filter buttons.
+        ### input
+        - enable (bool): state
+        '''
+        componentList = ['IRCBtn1', 'IRCBtn2']
+        for component in componentList:
+            self.GUIWindow[component].update(disabled = not enable)
+        return
+    
+    # enableInitHomeBtn
+    def enableInitHomeBtn(self, enable:bool=True):
+        '''
+        Enable the initialize and home motors button.  PI is required in the lens for this operation. 
+        ### input
+        - enable (bool): state
+        '''
+        self.GUIWindow['motorInitHomeBtn'].update(disabled = not enable)
+        self.GUIWindow['lensIQCheckbox'].update(disabled = not enable)
+        if not enable:
+            self.GUIWindow['lensIQCheckbox'].update(value=False)
         return
     
     # set the regard limits flag in MCR module

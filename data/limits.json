@@ -1,49 +1,136 @@
 {
-    "TL410P Rx": {
-        "name": "TL410P Rx",
+    "TL1250": {
+        "fam": "TW90",
+        "zoomSteps": 3227,
+        "zoomPI": 3119,
+        "focusSteps": 8390,
+        "focusPI": 7959,
+        "irisSteps": 75,
+        "N6": {
+            "name": "TL1250P N6",
+            "featureSet": {
+                "IRC": true,
+                "PI": true,
+                "filter1": "vis",
+                "filter2": "clear"
+            }
+        },
+        "N5": {
+            "name": "TL1250P N5",
+            "featureSet": {
+                "IRC": false,
+                "PI": true,
+                "filter1": "vis",
+                "filter2": "clear"
+            }
+        },
+        "N4": {
+            "name": "TL1250P N4",
+            "featureSet": {
+                "IRC": true,
+                "PI": false,
+                "filter1": "vis",
+                "filter2": "clear"
+            }
+        },
+        "N3": {
+            "name": "TL1250P N3",
+            "featureSet": {
+                "IRC": false,
+                "PI": false,
+                "filter1": "vis",
+                "filter2": "clear"
+            }
+        },
+        "940VN6": {
+            "name": "TL1250P-940V N6",
+            "featureSet": {
+                "IRC": true,
+                "PI": true,
+                "filter1": "vis",
+                "filter2": "940"
+            }
+        },
+        "940CN6": {
+            "name": "TL1250P-940C N6",
+            "featureSet": {
+                "IRC": true,
+                "PI": true,
+                "filter1": "clear",
+                "filter2": "940"
+            }
+        },
+        "850CN6": {
+            "name": "TL1250P-850C N6",
+            "featureSet": {
+                "IRC": true,
+                "PI": true,
+                "filter1": "clear",
+                "filter2": "850"
+            }
+        }
+    },
+    "TL410": {
         "fam": "TW50",
-        "zoomSteps": 4073, 
-        "zoomPI": 154, 
-        "focusSteps": 9353, 
-        "focusPI": 8952, 
+        "zoomSteps": 4073,
+        "zoomPI": 154,
+        "focusSteps": 9353,
+        "focusPI": 8952,
         "irisSteps": 75,
         "oldCamLastSN": "B10897",
-        "oldFocusPI": 8652
+        "oldCamFocusPI": 8652,
+        "R6": {
+            "name": "TL410P R6",
+            "featureSet": {
+                "IRC": true,
+                "PI": true,
+                "filter1": "vis",
+                "filter2": "clear"
+            }
+        },
+        "R5": {
+            "name": "TL410P R5",
+            "featureSet": {
+                "IRC": false,
+                "PI": true,
+                "filter1": "vis",
+                "filter2": "clear"
+            }
+        },
+        "R4": {
+            "name": "TL410P R4",
+            "featureSet": {
+                "IRC": true,
+                "PI": false,
+                "filter1": "vis",
+                "filter2": "clear"
+            }
+        },
+        "R3": {
+            "name": "TL410P R3",
+            "featureSet": {
+                "IRC": false,
+                "PI": false,
+                "filter1": "vis",
+                "filter2": "clear"
+            }
+        }
     },
-    "TL1250P Rx": {
-        "name": "TL1250P Rx",
-        "fam": "TW60",
-        "zoomSteps":3256, 
-        "zoomPI": 3147, 
-        "focusSteps": 8466, 
-        "focusPI": 8031, 
-        "irisSteps": 75
-    },
-    "TL410P Nx": {
-        "name": "TL410P Nx",
-        "fam": "TW80",
-        "zoomSteps": 4017,
-        "zoomPI": 136, 
-        "focusSteps": 9269, 
-        "focusPI": 8574, 
-        "irisSteps": 75
-    },
-    "TL1250P Nx": {
-        "name": "TL1250P Nx",
-        "fam": "TW90",
-        "zoomSteps":3227,
-        "zoomPI": 3119, 
-        "focusSteps": 8390, 
-        "focusPI": 7959, 
-        "irisSteps": 75
-    },
-    "TL936P Rx": {
-        "name": "TL936P Rx",
+    "TL936": {
         "fam": "TW46",
         "zoomSteps": 2994,
-        "zoomPI": 2958, 
-        "focusSteps": 5180, 
-        "focusPI": 5128, 
-        "irisSteps": 75
+        "zoomPI": 2958,
+        "focusSteps": 5180,
+        "focusPI": 5128,
+        "irisSteps": 75,
+        "R6": {
+            "name": "TL936P R6",
+            "featureSet": {
+                "IRC": true,
+                "PI": true,
+                "filter1": "vis",
+                "filter2": "clear"
+            }
+        }
     }
 }
