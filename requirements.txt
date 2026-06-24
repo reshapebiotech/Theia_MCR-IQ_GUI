@@ -12,6 +12,3 @@ numpy>=1.24.0
 
 # Serial Communication
 pyserial>=3.5
-
-# Clipboard Support
-pyperclip>=1.8.0
