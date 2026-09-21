@@ -3,7 +3,7 @@
 # v.1.0.0 250811 extracted from Theia_lensIQ_GUI v.2.5.7 
 
 import FreeSimpleGUI as sg
-import utilities
+from theia_mcr_iq import ports as utilities
 import os
 from tkinter import Tk
 from tkinter.filedialog import askopenfilename

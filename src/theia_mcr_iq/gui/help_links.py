@@ -1,11 +1,11 @@
 # Lens IQ and MCR IQ help functions and links
 # Create the list of hyperlinks in the helpLinks.json file in the format: {"link_text": "URL"}
 
-import read_settings_files
+from theia_mcr_iq import settings as read_settings_files
 
 
 # global variables
-helpLinksFileName = 'helpLinks.json'   # file containing the help links
+helpLinksFileName = 'help_links.json'   # file containing the help links
 
 
 def help_init() -> dict | None:

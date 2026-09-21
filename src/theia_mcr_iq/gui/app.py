@@ -2,33 +2,22 @@
 # (c) 2025-2026 Theia Technologies LLC
 # contact Mark Peterson at mpeterson@theiatech.com for more information
 
-# pyright: reportOptionalMemberAccess=false
-# pyright: reportOptionalSubscript=false
-# pyright: reportArgumentType=false
-# pyright: reportMissingImports=false
-
-############# import interception hack for C++ module testing #############
-# For C++ module testing, intercept the TheiaMCR library import and use the local version instead of any installed version.  
-# This allows testing with the latest code without needing to do a full install after each build.
-# Point to the compiled TheiaMCR_C module
-import sys, os
-_mcr_build = r"C:\Users\mpete\OneDrive - Theia Technologies\Documents\Python\TheiaMCR_C\build\Debug"
-#if _mcr_build not in sys.path:
-#    sys.path.insert(0, _mcr_build)
-#import TheiaMCR_py as TheiaMCR   # shadows any installed TheiaMCR
-#print(f"Using TheiaMCR from: {TheiaMCR.__file__}")
-############ end of import interception hack ############
 
 import FreeSimpleGUI as sg
 import logging
 import TheiaMCR
 import sys
 from os import path
-import utilities
-import GUI_setup
-import read_settings_files as settingsFiles
-import GUI_actions
-import lensIQ_expansion
+from theia_mcr_iq import ports as utilities
+from theia_mcr_iq.gui import layout as GUI_setup
+from theia_mcr_iq import settings as settingsFiles
+from theia_mcr_iq.gui import actions as GUI_actions
+from theia_mcr_iq import __version__
+
+try:
+    import lensIQ_expansion
+except ImportError:  # optional expansion pack, not published
+    lensIQ_expansion = None
 from typing import Optional
 import threading
 
@@ -39,7 +28,11 @@ logging.basicConfig(level=logging.DEBUG, format='%(levelname)-7s ln:%(lineno)-4d
 MCRDebugLogLevel = False
 
 # application revision
-REVISION = '3.2.0'
+REVISION = __version__
+
+# shared state, owned by main()
+MCR: Optional[TheiaMCR.MCRControl] = None
+mainGUIWindow: Optional[sg.Window] = None
 
 settingsFileName = 'Motor control config.json'
 lensDataFileName = 'limits.json'                   # lens data (names and extents)
@@ -560,292 +553,300 @@ def handleSettingsValues(values:dict):
     
     return 
 
-##################################################
-### main application routine 
-##################################################
-# global variable
-MCR: Optional[TheiaMCR.MCRControl] = None # type: ignore
-mainGUIWindow: Optional[sg.Window] = None
+def main() -> int:
+    '''Run the GUI application.'''
+    global MCR, mainGUIWindow, settings, comPort, comPortList, lensData, lensVariants, lensFamiliesList, lensNameToKey, lensKeyToName, lensNameList, lastLensFamily, actions, enableLensIQFunctions, IQEP, calibrationFileName
+    ##################################################
+    ### main application routine 
+    ##################################################
+    # global variable
+    MCR = None
+    mainGUIWindow = None
 
-settings = settingsFiles.readSettingsFile(settingsFileName)
-comPort = settings.get('comPort', '')
-comPortList = utilities.searchComPorts()
-if comPort not in comPortList:
-    comPort = ''
+    settings = settingsFiles.readSettingsFile(settingsFileName)
+    comPort = settings.get('comPort', '')
+    comPortList = utilities.searchComPorts()
+    if comPort not in comPortList:
+        comPort = ''
 
-# default lens setup
-lensData = settingsFiles.readUserDataFile(lensDataFileName)
-if lensData == None:
-    sg.popup_ok(f'Lens data file not found: {lensDataFileName}', title='Error')
-    sys.exit(1)
+    # default lens setup
+    lensData = settingsFiles.readUserDataFile(lensDataFileName)
+    if lensData == None:
+        sg.popup_ok(f'Lens data file not found: {lensDataFileName}', title='Error')
+        sys.exit(1)
 
-# Flatten grouped lens data into selectable variants while preserving common family values.
-lensVariants = {}
-for familyKey, familyRecord in lensData.items():
-    if not isinstance(familyRecord, dict):
-        continue
+    # Flatten grouped lens data into selectable variants while preserving common family values.
+    lensVariants = {}
+    for familyKey, familyRecord in lensData.items():
+        if not isinstance(familyRecord, dict):
+            continue
 
-    variantKeys = [k for k, v in familyRecord.items() if isinstance(v, dict) and 'name' in v]
-    commonRecord = {k: v for k, v in familyRecord.items() if k not in variantKeys}
-    for variantKey in variantKeys:
-        variantRecord = familyRecord[variantKey]
-        lensKey = f'{familyKey}_{variantKey}'
-        mergedRecord = dict(commonRecord)
-        mergedRecord.update(variantRecord)
-        lensVariants[lensKey] = mergedRecord
+        variantKeys = [k for k, v in familyRecord.items() if isinstance(v, dict) and 'name' in v]
+        commonRecord = {k: v for k, v in familyRecord.items() if k not in variantKeys}
+        for variantKey in variantKeys:
+            variantRecord = familyRecord[variantKey]
+            lensKey = f'{familyKey}_{variantKey}'
+            mergedRecord = dict(commonRecord)
+            mergedRecord.update(variantRecord)
+            lensVariants[lensKey] = mergedRecord
 
-lensFamiliesList = list(lensVariants.keys())
+    lensFamiliesList = list(lensVariants.keys())
 
-# Build display-name mappings so UI does not depend on top-level JSON keys.
-lensNameToKey = {lensVariants[k].get('name', k): k for k in lensFamiliesList}
-lensKeyToName = {k: lensVariants[k].get('name', k) for k in lensFamiliesList}
-lensNameList = [lensKeyToName[k] for k in lensFamiliesList]
+    # Build display-name mappings so UI does not depend on top-level JSON keys.
+    lensNameToKey = {lensVariants[k].get('name', k): k for k in lensFamiliesList}
+    lensKeyToName = {k: lensVariants[k].get('name', k) for k in lensFamiliesList}
+    lensNameList = [lensKeyToName[k] for k in lensFamiliesList]
 
-lastLensFamily = settings.get('lastLensFamily', '')
-lastLensFamilyMigrated = migrateLensFamilySetting(lastLensFamily)
-if lastLensFamilyMigrated == '':
-    sg.popup_ok(f'Lens data file has no entries: {lensDataFileName}', title='Error')
-    sys.exit(1)
+    lastLensFamily = settings.get('lastLensFamily', '')
+    lastLensFamilyMigrated = migrateLensFamilySetting(lastLensFamily)
+    if lastLensFamilyMigrated == '':
+        sg.popup_ok(f'Lens data file has no entries: {lensDataFileName}', title='Error')
+        sys.exit(1)
 
-if lastLensFamilyMigrated != lastLensFamily:
-    log.info(f'Migrated saved lens family from "{lastLensFamily}" to "{lastLensFamilyMigrated}"')
-    settings['lastLensFamily'] = lastLensFamilyMigrated
-lastLensFamily = lastLensFamilyMigrated
+    if lastLensFamilyMigrated != lastLensFamily:
+        log.info(f'Migrated saved lens family from "{lastLensFamily}" to "{lastLensFamilyMigrated}"')
+        settings['lastLensFamily'] = lastLensFamilyMigrated
+    lastLensFamily = lastLensFamilyMigrated
 
-# create the GUI window
-actions = createMainGUI()
-configureIRCButtons(lastLensFamily)
-actions.enableInitHomeBtn(checkForLensPI(lastLensFamily if lastLensFamily != '' else lastLensFamily))
+    # create the GUI window
+    actions = createMainGUI()
+    configureIRCButtons(lastLensFamily)
+    actions.enableInitHomeBtn(checkForLensPI(lastLensFamily if lastLensFamily != '' else lastLensFamily))
 
-# Lens IQ setup variables
-enableLensIQFunctions = False
-IQEP = lensIQ_expansion.IQExpansionPack(mainGUIWindow, settings)
-calibrationFileName = ''
+    # Lens IQ setup variables
+    enableLensIQFunctions = False
+    IQEP = lensIQ_expansion.IQExpansionPack(mainGUIWindow, settings) if lensIQ_expansion else None
+    calibrationFileName = ''
 
-while (True and mainGUIWindow != None):
-    event, values = mainGUIWindow.read()
-    #log.debug(f"Event: {event}\n{values}")
-    if event in (sg.WIN_CLOSED, 'exitBtn'):
-        break
+    while (True and mainGUIWindow != None):
+        event, values = mainGUIWindow.read()
+        #log.debug(f"Event: {event}\n{values}")
+        if event in (sg.WIN_CLOSED, 'exitBtn'):
+            break
 
-    elif (event == 'cp_lensFam'):
-        selectedDisplayName = values['cp_lensFam']
-        newLensFamily = checkNewLensFamily(lensNameToKey.get(selectedDisplayName, ''))
-        if newLensFamily != None:
-            # a new lens is selected
-            lastLensFamily = newLensFamily
-            settings['lastLensFamily'] = lastLensFamily
-            newLensPI = checkForLensPI(newLensFamily)
-            if not newLensPI:
-                # lens is not IQ-capable: uninitialize and hide the cal file picker fields
-                uninitialize(motorReset=True, calDataFileReset=True)
-                mainGUIWindow['calFileText'].update(visible=False)
-                mainGUIWindow['calFile'].update(visible=False)
-                mainGUIWindow['calFileBrowse'].update(visible=False)
-                mainGUIWindow.visibility_changed()
-                mainGUIWindow.refresh()
-            else:
-                # lens is IQ-capable (PI=True): restore file picker if checkbox is checked, re-validate any existing cal file
-                uninitialize(motorReset=True, calDataFileReset=False)
-                if values.get('lensIQCheckbox', False):
-                    mainGUIWindow['calFileText'].update(visible=True)
-                    mainGUIWindow['calFile'].update(visible=True)
-                    mainGUIWindow['calFileBrowse'].update(visible=True)
-                if calibrationFileName != '':
-                    calFileFam = IQEP.validateCalibrationFile(calibrationFileName)
-                    selectedFam = lensVariants.get(newLensFamily, {}).get('fam', '')
-                    compatibleLensFamilies = _FAMILY_COMPATIBILITY_MAP.get(calFileFam, {calFileFam}) if calFileFam else set()
-                    if calFileFam and selectedFam in compatibleLensFamilies:
-                        loadCalibrationFileData()
-                    else:
-                        # cal file is not compatible with new lens: clear silently
-                        calibrationFileName = ''
-                        mainGUIWindow['calFile'].update('')
-                        mainGUIWindow['calFileFull'].update('')
-                mainGUIWindow.visibility_changed()
-                mainGUIWindow.refresh()
+        elif (event == 'cp_lensFam'):
+            selectedDisplayName = values['cp_lensFam']
+            newLensFamily = checkNewLensFamily(lensNameToKey.get(selectedDisplayName, ''))
+            if newLensFamily != None:
+                # a new lens is selected
+                lastLensFamily = newLensFamily
+                settings['lastLensFamily'] = lastLensFamily
+                newLensPI = checkForLensPI(newLensFamily)
+                if not newLensPI:
+                    # lens is not IQ-capable: uninitialize and hide the cal file picker fields
+                    uninitialize(motorReset=True, calDataFileReset=True)
+                    mainGUIWindow['calFileText'].update(visible=False)
+                    mainGUIWindow['calFile'].update(visible=False)
+                    mainGUIWindow['calFileBrowse'].update(visible=False)
+                    mainGUIWindow.visibility_changed()
+                    mainGUIWindow.refresh()
+                else:
+                    # lens is IQ-capable (PI=True): restore file picker if checkbox is checked, re-validate any existing cal file
+                    uninitialize(motorReset=True, calDataFileReset=False)
+                    if values.get('lensIQCheckbox', False):
+                        mainGUIWindow['calFileText'].update(visible=True)
+                        mainGUIWindow['calFile'].update(visible=True)
+                        mainGUIWindow['calFileBrowse'].update(visible=True)
+                    if calibrationFileName != '':
+                        calFileFam = IQEP.validateCalibrationFile(calibrationFileName)
+                        selectedFam = lensVariants.get(newLensFamily, {}).get('fam', '')
+                        compatibleLensFamilies = _FAMILY_COMPATIBILITY_MAP.get(calFileFam, {calFileFam}) if calFileFam else set()
+                        if calFileFam and selectedFam in compatibleLensFamilies:
+                            loadCalibrationFileData()
+                        else:
+                            # cal file is not compatible with new lens: clear silently
+                            calibrationFileName = ''
+                            mainGUIWindow['calFile'].update('')
+                            mainGUIWindow['calFileFull'].update('')
+                    mainGUIWindow.visibility_changed()
+                    mainGUIWindow.refresh()
 
-    elif event == 'cp_port':
-        newComPort = values['cp_port']
-        if newComPort != comPort:
-            comPort = newComPort
-            settings['comPort'] = comPort
-            # cancel motor initialization status
-            uninitialize(motorReset=True, calDataFileReset=False)
-            if MCR:
-                MCR.close()
-                MCR = None
-
-    elif event == 'cp_refresh':
-        newComPortList = utilities.searchComPorts()
-        if comPort not in newComPortList:
-            # previously selected comPort no longer available, choose the last one in the new list
-            comPort = newComPortList[-1] if len(newComPortList) >= 1 else ''
-            if comPort != '':
+        elif event == 'cp_port':
+            newComPort = values['cp_port']
+            if newComPort != comPort:
+                comPort = newComPort
                 settings['comPort'] = comPort
-            # cancel motor initialization status
-            uninitialize(motorReset=True, calDataFileReset=False)
-            if MCR:
-                MCR.close()
-                MCR = None
-        mainGUIWindow['cp_port'].update(value=comPort, values=sorted(newComPortList), size=(18,10))
+                # cancel motor initialization status
+                uninitialize(motorReset=True, calDataFileReset=False)
+                if MCR:
+                    MCR.close()
+                    MCR = None
+
+        elif event == 'cp_refresh':
+            newComPortList = utilities.searchComPorts()
+            if comPort not in newComPortList:
+                # previously selected comPort no longer available, choose the last one in the new list
+                comPort = newComPortList[-1] if len(newComPortList) >= 1 else ''
+                if comPort != '':
+                    settings['comPort'] = comPort
+                # cancel motor initialization status
+                uninitialize(motorReset=True, calDataFileReset=False)
+                if MCR:
+                    MCR.close()
+                    MCR = None
+            mainGUIWindow['cp_port'].update(value=comPort, values=sorted(newComPortList), size=(18,10))
             
-    elif event == 'motorInitBtn':
-        if comPort != '':
-            uninitialize(motorReset=False, calDataFileReset=True)
-            calibrationFileName = ''
-            initMCR(MCRCom=comPort, homeMotors=False, lensFam=lastLensFamily, regardLimits=False)
-        else:
-            log.error("** Com port is blank")
-            sg.popup_ok('Com port is blank', title='Error')
-    
-    elif event == 'motorInitHomeBtn':
-        if comPort != '':
-            featureSet = lensVariants.get(lastLensFamily, {}).get('featureSet', {})
-            hasPI = bool(featureSet.get('PI', False)) if isinstance(featureSet, dict) else False
-            if hasPI:
-                success = initMCR(lensFam=lastLensFamily, MCRCom=comPort, homeMotors=True, regardLimits=True)
-                if success and MCR.MCRInitialized:
-                    loadCalibrationFileData()
-            else:
+        elif event == 'motorInitBtn':
+            if comPort != '':
+                uninitialize(motorReset=False, calDataFileReset=True)
+                calibrationFileName = ''
                 initMCR(MCRCom=comPort, homeMotors=False, lensFam=lastLensFamily, regardLimits=False)
-        else:
-            log.error("** Com port is blank")
-            sg.popup_ok('Com port is blank', title='Error')
+            else:
+                log.error("** Com port is blank")
+                sg.popup_ok('Com port is blank', title='Error')
+    
+        elif event == 'motorInitHomeBtn':
+            if comPort != '':
+                featureSet = lensVariants.get(lastLensFamily, {}).get('featureSet', {})
+                hasPI = bool(featureSet.get('PI', False)) if isinstance(featureSet, dict) else False
+                if hasPI:
+                    success = initMCR(lensFam=lastLensFamily, MCRCom=comPort, homeMotors=True, regardLimits=True)
+                    if success and MCR.MCRInitialized:
+                        loadCalibrationFileData()
+                else:
+                    initMCR(MCRCom=comPort, homeMotors=False, lensFam=lastLensFamily, regardLimits=False)
+            else:
+                log.error("** Com port is blank")
+                sg.popup_ok('Com port is blank', title='Error')
 
-    elif event == 'settingsPopup':
-        # open the settings popup window.  The communication path for this program will always be 'USB'.  
-        pos = GUI_setup.windowPosition(mainGUIWindow)
-        settingsValues = GUI_setup.settingsGUI('USB', MCR, actions, pos)
-        if settingsValues != None:
-            handleSettingsValues(settingsValues)
-            if settingsValues['comUART'] or settingsValues['comI2C']:
-                # communications path was set to something else and USB is no longer available. 
-                if comPort == '':
-                    log.error('** Com port is blank')
-                    sg.popup_ok('Com path not changed: Com port is blank', title='Error')
-                    continue
-                if not MCR:
-                    MCR = TheiaMCR.MCRControl(comPort)
-                    if not MCR.MCRInitialized:
-                        log.error('** Com path not changed: MCR not initialized')
-                        sg.popup_ok('Motor control initalization error, communication path not changed', title='Error')
-                        MCR = None
+        elif event == 'settingsPopup':
+            # open the settings popup window.  The communication path for this program will always be 'USB'.  
+            pos = GUI_setup.windowPosition(mainGUIWindow)
+            settingsValues = GUI_setup.settingsGUI('USB', MCR, actions, pos)
+            if settingsValues != None:
+                handleSettingsValues(settingsValues)
+                if settingsValues['comUART'] or settingsValues['comI2C']:
+                    # communications path was set to something else and USB is no longer available. 
+                    if comPort == '':
+                        log.error('** Com port is blank')
+                        sg.popup_ok('Com path not changed: Com port is blank', title='Error')
                         continue
-                MCR.MCRBoard.setCommunicationPath('UART' if settingsValues['comUART'] else 'I2C')
-                sg.popup_ok(f'New communication path was set to {"UART" if settingsValues["comUART"] else "I2C"}.  USB communication is no longer available and this application will end.', title='New com path')
-                break
+                    if not MCR:
+                        MCR = TheiaMCR.MCRControl(comPort)
+                        if not MCR.MCRInitialized:
+                            log.error('** Com path not changed: MCR not initialized')
+                            sg.popup_ok('Motor control initalization error, communication path not changed', title='Error')
+                            MCR = None
+                            continue
+                    MCR.MCRBoard.setCommunicationPath('UART' if settingsValues['comUART'] else 'I2C')
+                    sg.popup_ok(f'New communication path was set to {"UART" if settingsValues["comUART"] else "I2C"}.  USB communication is no longer available and this application will end.', title='New com path')
+                    break
 
-    elif event == 'helpPopup':
-        pos = GUI_setup.windowPosition(mainGUIWindow)
-        GUI_setup.helpPopup(position=pos)
+        elif event == 'helpPopup':
+            pos = GUI_setup.windowPosition(mainGUIWindow)
+            GUI_setup.helpPopup(position=pos)
 
-    elif event == 'IRCBtn1':
-        if not MCR or not MCR.MCRInitialized:
-            continue
-        mainGUIWindow['IRCBtn1'].update(button_color=GUI_setup.IRCSelectedColor)
-        mainGUIWindow['IRCBtn2'].update(button_color=GUI_setup.TheiaDarkBlueColor)
-        MCR.IRC.state(1)
+        elif event == 'IRCBtn1':
+            if not MCR or not MCR.MCRInitialized:
+                continue
+            mainGUIWindow['IRCBtn1'].update(button_color=GUI_setup.IRCSelectedColor)
+            mainGUIWindow['IRCBtn2'].update(button_color=GUI_setup.TheiaDarkBlueColor)
+            MCR.IRC.state(1)
         
-    elif event == 'IRCBtn2':
-        if not MCR or not MCR.MCRInitialized:
-            continue
-        mainGUIWindow['IRCBtn1'].update(button_color=GUI_setup.TheiaDarkBlueColor)
-        mainGUIWindow['IRCBtn2'].update(button_color=GUI_setup.IRCSelectedColor)
-        MCR.IRC.state(2)
+        elif event == 'IRCBtn2':
+            if not MCR or not MCR.MCRInitialized:
+                continue
+            mainGUIWindow['IRCBtn1'].update(button_color=GUI_setup.TheiaDarkBlueColor)
+            mainGUIWindow['IRCBtn2'].update(button_color=GUI_setup.IRCSelectedColor)
+            MCR.IRC.state(2)
 
-    elif event == 'lensIQCheckbox':
-        showLensIQFileFields = bool(values['lensIQCheckbox'])
-        mainGUIWindow['calFileText'].update(visible=showLensIQFileFields)
-        mainGUIWindow['calFile'].update(visible=showLensIQFileFields)
-        mainGUIWindow['calFileBrowse'].update(visible=showLensIQFileFields)
-        if hasattr(mainGUIWindow, 'visibility_changed'):
-            mainGUIWindow.visibility_changed()
-        mainGUIWindow.refresh()
-        if not values['lensIQCheckbox']:
-            uninitialize(motorReset=False, calDataFileReset=True)
+        elif event == 'lensIQCheckbox':
+            showLensIQFileFields = bool(values['lensIQCheckbox'])
+            mainGUIWindow['calFileText'].update(visible=showLensIQFileFields)
+            mainGUIWindow['calFile'].update(visible=showLensIQFileFields)
+            mainGUIWindow['calFileBrowse'].update(visible=showLensIQFileFields)
+            if hasattr(mainGUIWindow, 'visibility_changed'):
+                mainGUIWindow.visibility_changed()
+            mainGUIWindow.refresh()
+            if not values['lensIQCheckbox']:
+                uninitialize(motorReset=False, calDataFileReset=True)
 
-    elif event == 'calFileFull':
-        mainGUIWindow['calFile'].update(path.basename(values['calFileFull']))
-        calibrationFileName = values['calFileFull']
-        loadCalibrationFileData()
+        elif event == 'calFileFull':
+            mainGUIWindow['calFile'].update(path.basename(values['calFileFull']))
+            calibrationFileName = values['calFileFull']
+            loadCalibrationFileData()
 
-    if enableLensIQFunctions: 
-        IQEP.IQActions.readGUIValues = values
-        IQEP.checkEvents(event, values)
+        if enableLensIQFunctions: 
+            IQEP.IQActions.readGUIValues = values
+            IQEP.checkEvents(event, values)
 
-    if MCR:
-        if MCR.MCRInitialized and event in {'moveWideBtn', 'moveTeleBtn', 'moveNearBtn', 'moveFarBtn', 'moveOpenBtn', 'moveCloseBtn', 'moveZoomAbsBtn', 'moveFocusAbsBtn', 'moveIrisAbsBtn', 'zoomCurFldUpdate', 'focusCurFldUpdate', 'irisCurFldUpdate'}:
-            actions.setStatus('moving')
-            if event == 'moveWideBtn':
-                # move zoom motor
-                MCR.zoom.moveRel(int(values['zoomStepFld']), correctForBL=actions.regardBacklash)
-                # update field
-                mainGUIWindow['zoomCurFld'].update(MCR.zoom.currentStep)
-                if enableLensIQFunctions: IQEP.updateAfterZoom()
-
-            elif event == 'moveTeleBtn':
-                # move zoom motor
-                MCR.zoom.moveRel(-int(values['zoomStepFld']), correctForBL=actions.regardBacklash)
-                # update field
-                mainGUIWindow['zoomCurFld'].update(MCR.zoom.currentStep)
-                if enableLensIQFunctions: IQEP.updateAfterZoom()
-
-            elif event == 'moveNearBtn':
-                # move focus motor
-                MCR.focus.moveRel(-int(values['focusStepFld']), correctForBL=actions.regardBacklash)
-                # update field
-                mainGUIWindow['focusCurFld'].update(MCR.focus.currentStep)
-                if enableLensIQFunctions: IQEP.updateAfterFocus(changeOD=False)
-
-            elif event == 'moveFarBtn':
-                # move focus motor
-                MCR.focus.moveRel(int(values['focusStepFld']), correctForBL=actions.regardBacklash)
-                # updated field
-                mainGUIWindow['focusCurFld'].update(MCR.focus.currentStep)
-                if enableLensIQFunctions: IQEP.updateAfterFocus(changeOD=False)
-
-            elif event == 'moveOpenBtn':
-                # move iris motor
-                MCR.iris.moveRel(-int(values['irisStepFld']), correctForBL=False)
-                # update field
-                mainGUIWindow['irisCurFld'].update(MCR.iris.currentStep)
-                if enableLensIQFunctions: IQEP.updateAfterIris()
-
-            elif event == 'moveCloseBtn':
-                # move iris motor
-                MCR.iris.moveRel(int(values['irisStepFld']), correctForBL=False)
-                # updated field
-                mainGUIWindow['irisCurFld'].update(MCR.iris.currentStep)
-                if enableLensIQFunctions: IQEP.updateAfterIris()
-
-            elif event in {'moveZoomAbsBtn', 'zoomCurFldUpdate'}:
-                if actions.absMoveInitialized:
-                    # move to absolute position
-                    MCR.zoom.moveAbs(int(values['zoomCurFld']))
-                    # confirm update field
+        if MCR:
+            if MCR.MCRInitialized and event in {'moveWideBtn', 'moveTeleBtn', 'moveNearBtn', 'moveFarBtn', 'moveOpenBtn', 'moveCloseBtn', 'moveZoomAbsBtn', 'moveFocusAbsBtn', 'moveIrisAbsBtn', 'zoomCurFldUpdate', 'focusCurFldUpdate', 'irisCurFldUpdate'}:
+                actions.setStatus('moving')
+                if event == 'moveWideBtn':
+                    # move zoom motor
+                    MCR.zoom.moveRel(int(values['zoomStepFld']), correctForBL=actions.regardBacklash)
+                    # update field
                     mainGUIWindow['zoomCurFld'].update(MCR.zoom.currentStep)
                     if enableLensIQFunctions: IQEP.updateAfterZoom()
 
-            elif event in {'moveFocusAbsBtn', 'focusCurFldUpdate'}:
-                if actions.absMoveInitialized:
-                    # move to absolute position
-                    MCR.focus.moveAbs(int(values['focusCurFld']))
-                    # confirm update field
+                elif event == 'moveTeleBtn':
+                    # move zoom motor
+                    MCR.zoom.moveRel(-int(values['zoomStepFld']), correctForBL=actions.regardBacklash)
+                    # update field
+                    mainGUIWindow['zoomCurFld'].update(MCR.zoom.currentStep)
+                    if enableLensIQFunctions: IQEP.updateAfterZoom()
+
+                elif event == 'moveNearBtn':
+                    # move focus motor
+                    MCR.focus.moveRel(-int(values['focusStepFld']), correctForBL=actions.regardBacklash)
+                    # update field
                     mainGUIWindow['focusCurFld'].update(MCR.focus.currentStep)
                     if enableLensIQFunctions: IQEP.updateAfterFocus(changeOD=False)
 
-            elif event in {'moveIrisAbsBtn', 'irisCurFldUpdate'}:
-                if actions.absMoveInitialized:
-                    # move to absolute position
-                    MCR.iris.moveAbs(int(values['irisCurFld']))
-                    # confirm update field
+                elif event == 'moveFarBtn':
+                    # move focus motor
+                    MCR.focus.moveRel(int(values['focusStepFld']), correctForBL=actions.regardBacklash)
+                    # updated field
+                    mainGUIWindow['focusCurFld'].update(MCR.focus.currentStep)
+                    if enableLensIQFunctions: IQEP.updateAfterFocus(changeOD=False)
+
+                elif event == 'moveOpenBtn':
+                    # move iris motor
+                    MCR.iris.moveRel(-int(values['irisStepFld']), correctForBL=False)
+                    # update field
                     mainGUIWindow['irisCurFld'].update(MCR.iris.currentStep)
                     if enableLensIQFunctions: IQEP.updateAfterIris()
-        
-            ####### check for unknown position
-            actions.setStatus('ready')
 
-if MCR:
-    MCR.close()
-if mainGUIWindow: mainGUIWindow.close()
+                elif event == 'moveCloseBtn':
+                    # move iris motor
+                    MCR.iris.moveRel(int(values['irisStepFld']), correctForBL=False)
+                    # updated field
+                    mainGUIWindow['irisCurFld'].update(MCR.iris.currentStep)
+                    if enableLensIQFunctions: IQEP.updateAfterIris()
+
+                elif event in {'moveZoomAbsBtn', 'zoomCurFldUpdate'}:
+                    if actions.absMoveInitialized:
+                        # move to absolute position
+                        MCR.zoom.moveAbs(int(values['zoomCurFld']))
+                        # confirm update field
+                        mainGUIWindow['zoomCurFld'].update(MCR.zoom.currentStep)
+                        if enableLensIQFunctions: IQEP.updateAfterZoom()
+
+                elif event in {'moveFocusAbsBtn', 'focusCurFldUpdate'}:
+                    if actions.absMoveInitialized:
+                        # move to absolute position
+                        MCR.focus.moveAbs(int(values['focusCurFld']))
+                        # confirm update field
+                        mainGUIWindow['focusCurFld'].update(MCR.focus.currentStep)
+                        if enableLensIQFunctions: IQEP.updateAfterFocus(changeOD=False)
+
+                elif event in {'moveIrisAbsBtn', 'irisCurFldUpdate'}:
+                    if actions.absMoveInitialized:
+                        # move to absolute position
+                        MCR.iris.moveAbs(int(values['irisCurFld']))
+                        # confirm update field
+                        mainGUIWindow['irisCurFld'].update(MCR.iris.currentStep)
+                        if enableLensIQFunctions: IQEP.updateAfterIris()
+        
+                ####### check for unknown position
+                actions.setStatus('ready')
+
+    if MCR:
+        MCR.close()
+    if mainGUIWindow: mainGUIWindow.close()
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

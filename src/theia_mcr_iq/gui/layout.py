@@ -6,17 +6,17 @@
 # pyright: reportOptionalMemberAccess=false
 
 import FreeSimpleGUI as sg
-import utilities
-import lensIQ_help as help
+from theia_mcr_iq import ports as utilities
+from theia_mcr_iq.gui import help_links as help
 import webbrowser as web
 
 import logging
 log = logging.getLogger(__name__)
 
-TheiaLogoImagePath = utilities.resourcePath('config/Theia_logo.png')
-TheiaMenuIcon = utilities.resourcePath('config/TL1250P.ico')
-settingsIconPath = utilities.resourcePath('config/cog.png')    # location of the gear icon for settings
-helpIconPath = utilities.resourcePath('config/help.png')       # location of the help icon
+TheiaLogoImagePath = utilities.resourcePath('assets/theia_logo.png')
+TheiaMenuIcon = utilities.resourcePath('assets/tl1250p.ico')
+settingsIconPath = utilities.resourcePath('assets/cog.png')    # location of the gear icon for settings
+helpIconPath = utilities.resourcePath('assets/help.png')       # location of the help icon
 TheiaColorTheme = 'LightGrey1'
 TheiaWhiteColor = '#FFFFFF'
 TheiaGreenColor = '#006633'
