@@ -12,6 +12,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Shared `MCRSession` controller used by both the GUI and the CLI, with classified errors.
 - Test suite with a fake controller, and a CI workflow for Linux, macOS and Windows.
 - `justfile` task runner recipes and pre-commit hooks (ruff and ty on commit, pytest on push).
+- Docker distribution of the CLI: a `Dockerfile` for a small Alpine image, the `docker/theia-mcr` wrapper script that runs it with the host's serial devices, and a release workflow that publishes `ghcr.io/reshapebiotech/theia-mcr-iq` with the wheel, offline image tarballs and the wrapper attached to the GitHub release.
 
 ### Changed
 
@@ -21,6 +22,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The GUI is an `App` class with typed element keys; module and function names follow PEP 8.
 - Platform-neutral wording (serial port instead of COM port) and fonts; PNG window icon on macOS and Linux.
 - The Lens IQ expansion pack is detected at start-up and the Lens IQ checkbox is disabled when it is not installed.
+- The CLI's automatic port choice prefers the single USB serial device over built-in UARTs and virtual ports.
 
 ### Fixed
 
