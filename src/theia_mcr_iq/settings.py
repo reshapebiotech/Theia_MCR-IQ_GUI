@@ -1,68 +1,80 @@
-# Read files specific to Theia_lensIQ_GUI.py
-#
-# v.1.0.0 250811 extracted from Theia_lensIQ_GUI v.2.5.7 
+"""Persistent user settings stored as a JSON file in the data directory."""
 
-import FreeSimpleGUI as sg
-from theia_mcr_iq import ports as utilities
-import os
-from tkinter import Tk
-from tkinter.filedialog import askopenfilename
+from __future__ import annotations
+
 import json
 import logging
+from collections.abc import Iterator, MutableMapping
+from pathlib import Path
+from typing import Any
+
+from theia_mcr_iq import paths
 
 log = logging.getLogger(__name__)
-log.setLevel(logging.INFO)
 
-def readSettingsFile(settingsFileName:str) -> sg.UserSettings:
-    '''
-    Read the settings file data
-    ### input: 
-    - settingsFileName: the short name of the settings file
-    ### return: 
-    [settings values]
-    '''
-    appDir = utilities.getUserDir()
-    settingsFullFileName = os.path.join(appDir, settingsFileName)
-    if not os.path.exists(settingsFullFileName):
-        settings = sg.UserSettings(filename=settingsFileName, path=appDir)
-        settings['comPort'] = ''
-        settings['lastLensFamily'] = ''
-    settings = sg.UserSettings(filename=settingsFileName, path=appDir, autosave=True)
-    return settings
+DEFAULTS: dict[str, Any] = {
+    "com_port": "",
+    "last_lens_key": "",
+    "focus_speed": 1000,
+    "zoom_speed": 1000,
+    "iris_speed": 100,
+    "focus_home_speed": 1000,
+    "zoom_home_speed": 1000,
+    "iris_home_speed": 100,
+}
 
-# read lens data file
-def readUserDataFile(lensDataFileName:str) -> dict | None:
-    '''
-    Read the lens data file.
-    Priority order:
-    1) Environment data folder (dev workspace data/ or bundled exe data/)
-    2) AppData/local fallback copy
-    3) User-selected file (copied to AppData/local)
-    ### return:  
-    [lens data]
-    '''
-    userData = None
-    appDir = os.path.join(utilities.getUserDir(), 'data')
-    lensDataFullFileName = os.path.join(appDir, lensDataFileName)
-    envDataFullFileName = utilities.resourcePath(os.path.join('data', lensDataFileName))
 
-    for candidate in [envDataFullFileName, lensDataFullFileName]:
-        if os.path.exists(candidate):
-            with open(candidate, 'r') as f:
-                userData = json.load(f)
-            log.info(f'Loaded lens data from {candidate}')
-            return userData
+class Settings(MutableMapping[str, Any]):
+    """Dict-like settings that write themselves back to disk on every change."""
 
-    log.warning(f'No data file found in {envDataFullFileName} or {lensDataFullFileName}. Find the "{lensDataFileName}" file.')
-    # Open the data file and save to appDir
-    Tk().withdraw() 
-    filename = askopenfilename(defaultextension='.json', filetypes=[('JSON File', '.json')], title=f"Open {lensDataFileName} file")
-    if filename:
-        with open(filename, 'r') as f:
-            userData = json.load(f)
-        os.makedirs(appDir, exist_ok=True)
-        with open(lensDataFullFileName, 'w') as f:
-            json.dump(userData, f)
-    else:
-        return None
-    return userData
+    def __init__(self, path: Path, data: dict[str, Any] | None = None, autosave: bool = True) -> None:
+        """Wrap `data` (or the defaults) and persist to `path` when autosave is on."""
+        self.path = path
+        self.autosave = autosave
+        self._data: dict[str, Any] = dict(DEFAULTS)
+        if data:
+            self._data.update(data)
+
+    @classmethod
+    def load(cls, path: Path | None = None, autosave: bool = True) -> Settings:
+        """Read settings from `path` (default: the data directory), tolerating a missing or corrupt file."""
+        path = path or paths.settings_path()
+        data: dict[str, Any] = {}
+        if path.is_file():
+            try:
+                loaded = json.loads(path.read_text(encoding="utf-8"))
+                if isinstance(loaded, dict):
+                    data = loaded
+            except (OSError, json.JSONDecodeError) as exc:
+                log.warning("Ignoring unreadable settings file %s: %s", path, exc)
+        settings = cls(path, data, autosave=autosave)
+        if not path.is_file() and autosave:
+            settings.save()
+        return settings
+
+    def save(self) -> None:
+        """Write the settings to disk as indented JSON."""
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.write_text(json.dumps(self._data, indent=2) + "\n", encoding="utf-8")
+
+    def __getitem__(self, key: str) -> Any:
+        return self._data[key]
+
+    def __setitem__(self, key: str, value: Any) -> None:
+        self._data[key] = value
+        if self.autosave:
+            self.save()
+
+    def __delitem__(self, key: str) -> None:
+        del self._data[key]
+        if self.autosave:
+            self.save()
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._data)
+
+    def __len__(self) -> int:
+        return len(self._data)
+
+    def __repr__(self) -> str:
+        return f"Settings({self.path!s}, {self._data!r})"

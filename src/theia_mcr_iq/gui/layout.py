@@ -6,17 +6,13 @@
 # pyright: reportOptionalMemberAccess=false
 
 import FreeSimpleGUI as sg
-from theia_mcr_iq import ports as utilities
+from theia_mcr_iq import resources
 from theia_mcr_iq.gui import help_links as help
 import webbrowser as web
 
 import logging
 log = logging.getLogger(__name__)
 
-TheiaLogoImagePath = utilities.resourcePath('assets/theia_logo.png')
-TheiaMenuIcon = utilities.resourcePath('assets/tl1250p.ico')
-settingsIconPath = utilities.resourcePath('assets/cog.png')    # location of the gear icon for settings
-helpIconPath = utilities.resourcePath('assets/help.png')       # location of the help icon
 TheiaColorTheme = 'LightGrey1'
 TheiaWhiteColor = '#FFFFFF'
 TheiaGreenColor = '#006633'
@@ -40,7 +36,6 @@ def mainGUILayout():
     [handle to the window]
     '''
     sg.theme(TheiaColorTheme) 
-    sg.set_global_icon(TheiaMenuIcon)
     sg.set_options(button_color=[TheiaWhiteColor, TheiaDarkBlueColor], input_elements_background_color=TheiaLightYellowColor)
     # footer frame
     footerFrame = [
@@ -48,8 +43,8 @@ def mainGUILayout():
             sg.Text('', size=(20,1), font='Helvetica 8', key='fldFWRev'),
             sg.Text('', size=(20,1), font='Helvetica 8', key='fldSNBoard'),
             sg.Push(),
-            sg.Image(filename=helpIconPath, key='helpPopup', enable_events=True),
-            sg.Image(filename=settingsIconPath, key='settingsPopup', enable_events=True),
+            sg.Image(data=resources.asset_bytes('help.png'), key='helpPopup', enable_events=True),
+            sg.Image(data=resources.asset_bytes('cog.png'), key='settingsPopup', enable_events=True),
             sg.Button('Quit', size=(12,1), key="exitBtn")]
     ]
 
@@ -116,7 +111,7 @@ def mainGUILayout():
                 
     # overall layout
     layout = [
-        [sg.Column([[sg.Image(TheiaLogoImagePath), sg.Column(headerFrame)]], expand_x=True)],
+        [sg.Column([[sg.Image(data=resources.asset_bytes('theia_logo.png')), sg.Column(headerFrame)]], expand_x=True)],
         [sg.Frame('Lens IQ™', lensIQFrame, expand_x=True)],
         [sg.Frame('Relative move', relMoveFrame), sg.Frame('Current', curPosFrame), sg.Frame('Absolute move', absMoveFrame)],
         [sg.Column(IRCFrame)],
@@ -414,13 +409,13 @@ def helpPopup(position:tuple[int, int]):
         sg.popup_ok('No help links available', title='Error')
         return
     layout = []
-    for n, link in enumerate(helpLinks['links']):
+    for n, link in enumerate(helpLinks):
         layout.append([sg.Text(link['desc'], key=f'LINK{n}', enable_events=True)])
     layout.append([sg.Button('Close', size=(10,1))])
 
     window = sg.Window('Help resources and links', layout, finalize=True, modal=True)
     centerWindowPosition(window, position, 50)
-    for n in range(len(helpLinks['links'])):
+    for n in range(len(helpLinks)):
         help.hyperlink(window=window, fieldKey=f'LINK{n}')
 
     while True:
@@ -430,7 +425,7 @@ def helpPopup(position:tuple[int, int]):
     
         elif event.startswith('LINK'):
             index = int(event.replace('LINK', ''))
-            URL = helpLinks['links'][index]['URL']
+            URL = helpLinks[index]['URL']
             if URL:
                 web.open(URL)
     window.close()

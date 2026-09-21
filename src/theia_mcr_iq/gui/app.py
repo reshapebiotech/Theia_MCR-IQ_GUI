@@ -10,7 +10,8 @@ import sys
 from os import path
 from theia_mcr_iq import ports as utilities
 from theia_mcr_iq.gui import layout as GUI_setup
-from theia_mcr_iq import settings as settingsFiles
+from theia_mcr_iq import resources
+from theia_mcr_iq.settings import Settings
 from theia_mcr_iq.gui import actions as GUI_actions
 from theia_mcr_iq import __version__
 
@@ -34,8 +35,6 @@ REVISION = __version__
 MCR: Optional[TheiaMCR.MCRControl] = None
 mainGUIWindow: Optional[sg.Window] = None
 
-settingsFileName = 'Motor control config.json'
-lensDataFileName = 'limits.json'                   # lens data (names and extents)
 
 IRC_FILTER_LABELS = {
     'vis': 'Visible only\nfilter',
@@ -56,6 +55,7 @@ def createMainGUI():
     Fill in the values of some fields.  
     '''
     global mainGUIWindow
+    sg.set_global_icon(resources.window_icon())
     layout = GUI_setup.mainGUILayout()
     mainGUIWindow = sg.Window('Theia MCR IQ™ control', layout, finalize=True)
     GUI_setup.setRevisionField(mainGUIWindow, REVISION)
@@ -407,16 +407,16 @@ def initMCR(MCRCom:str, lensFam:str='', homeMotors:bool=True, regardLimits:bool=
         return False
     
     log.info('Initializing motors')
-    MCR.focusInit(lensConfig[2], lensConfig[3], move=homeMotors, homingSpeed=settings.get('focusHomeSpeed', 1000))
-    MCR.zoomInit(lensConfig[0], lensConfig[1], move=homeMotors, homingSpeed=settings.get('zoomHomeSpeed', 1000))
-    MCR.irisInit(lensConfig[4], move=homeMotors, homingSpeed=settings.get('irisHomeSpeed', 100))
+    MCR.focusInit(lensConfig[2], lensConfig[3], move=homeMotors, homingSpeed=settings['focus_home_speed'])
+    MCR.zoomInit(lensConfig[0], lensConfig[1], move=homeMotors, homingSpeed=settings['zoom_home_speed'])
+    MCR.irisInit(lensConfig[4], move=homeMotors, homingSpeed=settings['iris_home_speed'])
     MCR.IRCInit()
     MCR.IRC.state(1)
     hasPI = checkForLensPI(lensFam if lensFam != '' else lastLensFamily)
     hasIRC = configureIRCButtons(lensFam if lensFam != '' else lastLensFamily)
     mainGUIWindow['IRCBtn1'].update(button_color=GUI_setup.IRCSelectedColor)
     # set initial motor speeds
-    setMotorSpeeds(settings.get('focusSpeed', 1000), settings.get('zoomSpeed', 1000), settings.get('irisSpeed', 100))
+    setMotorSpeeds(settings['focus_speed'], settings['zoom_speed'], settings['iris_speed'])
 
     # initialize GUI settings
     actions.setRegardLimits(regardLimits)
@@ -515,17 +515,17 @@ def setMotorSpeeds(focusSpeed:int=1000, zoomSpeed:int=1000, irisSpeed:int=100, h
     # set the method based on setting move or home speed. 
     func_name = 'setHomingSpeed' if homing else 'setMotorSpeed'
     if (getattr(MCR.focus, func_name)(int(focusSpeed)) == 0): 
-        settings['focusHomeSpeed' if homing else 'focusSpeed'] = int(focusSpeed)
+        settings['focus_home_speed' if homing else 'focus_speed'] = int(focusSpeed)
     else:
         log.warning(f'Focus motor speed {focusSpeed} is out of range, not changed')
 
     if (getattr(MCR.zoom, func_name)(int(zoomSpeed)) == 0): 
-        settings['zoomHomeSpeed' if homing else 'zoomSpeed'] = int(zoomSpeed)
+        settings['zoom_home_speed' if homing else 'zoom_speed'] = int(zoomSpeed)
     else:
         log.warning(f'Zoom motor speed {zoomSpeed} is out of range, not changed')
 
     if (getattr(MCR.iris, func_name)(int(irisSpeed)) == 0): 
-        settings['irisHomeSpeed' if homing else 'irisSpeed'] = int(irisSpeed)
+        settings['iris_home_speed' if homing else 'iris_speed'] = int(irisSpeed)
     else:
         log.warning(f'Iris motor speed {irisSpeed} is out of range, not changed')
     return
@@ -563,17 +563,14 @@ def main() -> int:
     MCR = None
     mainGUIWindow = None
 
-    settings = settingsFiles.readSettingsFile(settingsFileName)
-    comPort = settings.get('comPort', '')
+    settings = Settings.load()
+    comPort = settings['com_port']
     comPortList = utilities.searchComPorts()
     if comPort not in comPortList:
         comPort = ''
 
     # default lens setup
-    lensData = settingsFiles.readUserDataFile(lensDataFileName)
-    if lensData == None:
-        sg.popup_ok(f'Lens data file not found: {lensDataFileName}', title='Error')
-        sys.exit(1)
+    lensData = resources.load_lens_data()
 
     # Flatten grouped lens data into selectable variants while preserving common family values.
     lensVariants = {}
@@ -597,15 +594,15 @@ def main() -> int:
     lensKeyToName = {k: lensVariants[k].get('name', k) for k in lensFamiliesList}
     lensNameList = [lensKeyToName[k] for k in lensFamiliesList]
 
-    lastLensFamily = settings.get('lastLensFamily', '')
+    lastLensFamily = settings['last_lens_key']
     lastLensFamilyMigrated = migrateLensFamilySetting(lastLensFamily)
     if lastLensFamilyMigrated == '':
-        sg.popup_ok(f'Lens data file has no entries: {lensDataFileName}', title='Error')
-        sys.exit(1)
+        sg.popup_ok('Lens data file has no entries', title='Error')
+        return 1
 
     if lastLensFamilyMigrated != lastLensFamily:
         log.info(f'Migrated saved lens family from "{lastLensFamily}" to "{lastLensFamilyMigrated}"')
-        settings['lastLensFamily'] = lastLensFamilyMigrated
+        settings['last_lens_key'] = lastLensFamilyMigrated
     lastLensFamily = lastLensFamilyMigrated
 
     # create the GUI window
@@ -630,7 +627,7 @@ def main() -> int:
             if newLensFamily != None:
                 # a new lens is selected
                 lastLensFamily = newLensFamily
-                settings['lastLensFamily'] = lastLensFamily
+                settings['last_lens_key'] = lastLensFamily
                 newLensPI = checkForLensPI(newLensFamily)
                 if not newLensPI:
                     # lens is not IQ-capable: uninitialize and hide the cal file picker fields
@@ -665,7 +662,7 @@ def main() -> int:
             newComPort = values['cp_port']
             if newComPort != comPort:
                 comPort = newComPort
-                settings['comPort'] = comPort
+                settings['com_port'] = comPort
                 # cancel motor initialization status
                 uninitialize(motorReset=True, calDataFileReset=False)
                 if MCR:
@@ -678,7 +675,7 @@ def main() -> int:
                 # previously selected comPort no longer available, choose the last one in the new list
                 comPort = newComPortList[-1] if len(newComPortList) >= 1 else ''
                 if comPort != '':
-                    settings['comPort'] = comPort
+                    settings['com_port'] = comPort
                 # cancel motor initialization status
                 uninitialize(motorReset=True, calDataFileReset=False)
                 if MCR:
