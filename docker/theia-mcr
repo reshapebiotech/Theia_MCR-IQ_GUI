@@ -1,0 +1,38 @@
+#!/bin/sh
+# Run the theia-mcr CLI from its Docker image as if it were installed locally.
+#
+# Copy this file to any folder on the host, chmod +x it, and run it from there:
+#   ./theia-mcr ports
+#   ./theia-mcr --lens TL410_R6 focus rel 100
+#
+# The image is pulled on first use. Environment:
+#   THEIA_MCR_IMAGE       image to run (default below; set to a `docker load`ed tag for offline hosts)
+#   THEIA_MCR_DATA_DIR    host folder mounted at /data for limits.json and GUI-saved settings
+#   THEIA_MCR_PORT        serial device inside the container, same path as on the host
+#   THEIA_MCR_LENS        lens key, see `theia-mcr lenses`
+#   THEIA_MCR_PRIVILEGED  set to 1 when the cgroup device rules do not work (rootless Docker)
+set -eu
+
+IMAGE="${THEIA_MCR_IMAGE:-ghcr.io/reshapebiotech/theia-mcr-iq:4.0.0}"  # bump with each release
+DATA="${THEIA_MCR_DATA_DIR:-$HOME/.theia-mcr}"
+
+mkdir -p "$DATA"  # create it as the user, otherwise Docker creates it root-owned
+
+TTY=""
+if [ -t 0 ] && [ -t 1 ]; then
+    TTY="-t"
+fi
+
+# The whole /dev tree is mounted so a board plugged in after start is visible; the cgroup
+# rules grant access to USB serial (major 188) and CDC-ACM (major 166) devices only.
+if [ "${THEIA_MCR_PRIVILEGED:-0}" = "1" ]; then
+    set -- --privileged "$IMAGE" "$@"
+else
+    set -- --device-cgroup-rule 'c 188:* rmw' --device-cgroup-rule 'c 166:* rmw' "$IMAGE" "$@"
+fi
+
+exec docker run --rm -i $TTY --network none \
+    -v /dev:/dev \
+    -v "$DATA:/data" \
+    -e THEIA_MCR_PORT -e THEIA_MCR_LENS \
+    "$@"

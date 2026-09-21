@@ -6,7 +6,7 @@ This repository is a reworked fork of Theia's [Theia_MCR-IQ_GUI](https://github.
 
 ## Requirements
 
-- [uv](https://docs.astral.sh/uv/). It installs the pinned Python 3.13 (with Tk) on first use.
+- [uv](https://docs.astral.sh/uv/). It installs the pinned Python 3.13 (with Tk) on first use. For the CLI alone, Docker is enough, see [Run with Docker](#run-with-docker).
 - An MCR IQ board connected by USB. It appears as `/dev/tty.usbserial-*` on macOS, `/dev/ttyUSB*` or `/dev/ttyACM*` on Linux, and `COMn` on Windows.
 
 On Linux your user needs access to the serial device, usually by joining the `dialout` group.
@@ -22,6 +22,33 @@ uv run theia-mcr ports    # the CLI
 ```
 
 `uv sync` creates `.venv/` with the locked dependencies. Both commands are also available as console scripts inside that environment, and `uv run python -m theia_mcr_iq` starts the GUI too.
+
+## Run with Docker
+
+For Linux hosts that have Docker but no Python 3.11 or uv. Every GitHub release publishes the CLI as the image `ghcr.io/reshapebiotech/theia-mcr-iq` for amd64 and arm64, plus a wrapper script that runs it. The GUI is not in the image. Nothing is installed on the host: the wrapper is a single `sh` script that runs from any folder.
+
+```
+mkdir -p ~/theia-mcr && cd ~/theia-mcr
+curl -fsSLO https://github.com/reshapebiotech/Theia_MCR-IQ_GUI/releases/latest/download/theia-mcr
+chmod +x theia-mcr
+./theia-mcr ports
+```
+
+The first run pulls the image. From then on `./theia-mcr` takes the same commands and options as the native install, for example `./theia-mcr --lens TL410_R6 focus rel 100`. Removing the folder and the image (`docker image rm ghcr.io/reshapebiotech/theia-mcr-iq:4.0.0`) removes everything.
+
+The wrapper runs `docker run --rm` with the host's `/dev` mounted and device cgroup rules for USB serial (major 188) and CDC-ACM (major 166) devices. A board plugged in after the image was pulled is visible at once, and the container does not need `--privileged`. It runs as root, so it needs no `dialout` membership, and it has no network. `~/.theia-mcr` is mounted as the data directory, so a `limits.json` override and a lens or port saved by the GUI are read. `THEIA_MCR_PORT` and `THEIA_MCR_LENS` pass through.
+
+| Variable | Meaning |
+|---|---|
+| `THEIA_MCR_IMAGE` | Image to run. Default: the release's tag on ghcr.io. Point it at a locally built image such as `theia-mcr-iq:dev`. |
+| `THEIA_MCR_DATA_DIR` | Host folder mounted for settings and `limits.json`. Default `~/.theia-mcr`. |
+| `THEIA_MCR_PRIVILEGED` | Set to `1` to run with `--privileged` instead of the cgroup rules, for rootless Docker where the rules do not apply. |
+
+Offline hosts: copy `theia-mcr-iq-<version>-linux-<arch>.tar.gz` from the release page to the host next to the wrapper and run `docker load < theia-mcr-iq-4.0.0-linux-amd64.tar.gz`. It restores the tag the wrapper expects, so nothing else needs configuring. The wheel on the same page is for hosts with Python 3.11 or newer that do not want Docker.
+
+Serial passthrough only works when Docker runs on the Linux kernel that owns the USB device. Docker Desktop on macOS and Windows runs a virtual machine without USB serial access, so there only `ports`, `lenses` and `--help` are useful.
+
+`just docker-build` builds the image locally as `theia-mcr-iq:dev` and `just docker-run lenses` runs the wrapper against it.
 
 ## GUI
 
@@ -60,7 +87,7 @@ Options work before or after the command:
 
 | Option | Meaning |
 |---|---|
-| `--port PORT` | Serial port. Default: `$THEIA_MCR_PORT`, then the port saved by the GUI if present, then the only port found. |
+| `--port PORT` | Serial port. Default: `$THEIA_MCR_PORT`, then the port saved by the GUI if present, then the only USB serial device, then the only port found. |
 | `--lens KEY` | Lens key or name from `theia-mcr lenses`. Default: `$THEIA_MCR_LENS`, then the lens saved by the GUI. |
 | `--home` | On move commands: home the motor first. Required for `abs`. |
 | `--speed PPS` | Motor speed for this command. Default: the speed saved by the GUI. |
@@ -96,6 +123,8 @@ just           # list every task
 The recipes in `justfile` wrap `uv run`; without [just](https://github.com/casey/just) run the same commands by hand, for example `uv run pytest`. The git hooks (`.pre-commit-config.yaml`) use the official ruff and ty hooks on commit, pinned to the same versions as `uv.lock`, and run the tests on push.
 
 Tests run against a fake controller and need no hardware. The tests that build the real main window skip on a Linux machine without a display. CI runs the same four commands on Linux, macOS and Windows.
+
+Pushing a `v*` tag runs the release workflow: it checks that the tag matches the version in `pyproject.toml` and the image tag pinned in `docker/theia-mcr`, pushes the image to ghcr.io, and attaches the wheel, sdist, image tarballs and wrapper to a GitHub release. Bump all three together.
 
 Layout: `src/theia_mcr_iq/controller.py` is the shared board session, `cli.py` the command-line tool, `gui/` the FreeSimpleGUI application, `lens_data.py` the lens table model, and `paths.py`, `resources.py`, `settings.py` handle files.
 

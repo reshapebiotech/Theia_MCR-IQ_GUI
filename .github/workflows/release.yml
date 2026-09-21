@@ -1,0 +1,73 @@
+# On a v* tag: publish the CLI image to ghcr.io and attach the wheel, sdist, per-architecture
+# image tarballs and the docker/theia-mcr wrapper to a GitHub release.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/theia-mcr-iq  # owner must be lowercase for ghcr
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+
+      - name: Check the tag against pyproject.toml and the wrapper's pinned image
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          project="$(uv version --short)"
+          wrapper="$(sed -n 's/.*theia-mcr-iq:\([0-9][^}]*\)}.*/\1/p' docker/theia-mcr)"
+          echo "tag=$tag pyproject=$project wrapper=$wrapper"
+          [ "$tag" = "$project" ] && [ "$tag" = "$wrapper" ]
+          echo "VERSION=$tag" >> "$GITHUB_ENV"
+
+      - name: Build the wheel and sdist
+        run: uv build
+
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=raw,value=latest
+
+      - name: Build and push the image for amd64 and arm64
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Save per-architecture tarballs of the pushed image for offline hosts
+        run: |
+          for arch in amd64 arm64; do
+            docker pull --platform "linux/$arch" "$IMAGE:$VERSION"
+            docker save "$IMAGE:$VERSION" | gzip > "dist/theia-mcr-iq-$VERSION-linux-$arch.tar.gz"
+          done
+          cp docker/theia-mcr dist/
+          ls -l dist
+
+      - uses: softprops/action-gh-release@v3
+        with:
+          files: dist/*
+          generate_release_notes: true
