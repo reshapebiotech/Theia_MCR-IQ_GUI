@@ -31,7 +31,7 @@ def load_lens_data() -> dict[str, Any]:
     if override.is_file():
         log.info("Loaded lens data override from %s", override)
         return json.loads(override.read_text(encoding="utf-8"))
-    log.info("Loaded packaged lens data")
+    log.debug("Loaded packaged lens data")
     return packaged_lens_data()
 
 

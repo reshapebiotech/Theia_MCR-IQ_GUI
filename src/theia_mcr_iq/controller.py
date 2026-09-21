@@ -199,13 +199,17 @@ class MCRSession:
             if ok is False:
                 raise MCRError("motor_init", f"{motor} motor initialization failed")
         if init_irc:
-            self._mcr.IRCInit()
+            self.init_irc()
             self._mcr.IRC.state(1)
         self.set_respect_limits(
             respect_limits, motors=[m for m in motors if m != "iris"]
         )
         if speeds is not None:
             self.set_speeds(speeds, motors=motors)
+
+    def init_irc(self) -> None:
+        """Initialize the IRC filter motor without touching the stepper motors."""
+        self._mcr.IRCInit()
 
     def set_speeds(
         self,
