@@ -1,5 +1,5 @@
-# Hooks run through `uv run` so they use the exact tool versions in uv.lock.
 # Install with `just hooks` (or `uv run pre-commit install --install-hooks`).
+# Keep the ruff and ty revs equal to the versions in uv.lock when bumping either.
 default_install_hook_types: [pre-commit, pre-push]
 
 repos:
@@ -14,26 +14,21 @@ repos:
       - id: check-added-large-files
       - id: check-merge-conflict
 
-  - repo: local
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.8
     hooks:
       - id: ruff-check
-        name: ruff check
-        entry: uv run ruff check --fix
-        language: system
-        types_or: [python, pyi]
-        require_serial: true
+        args: [--fix]
       - id: ruff-format
-        name: ruff format
-        entry: uv run ruff format
-        language: system
-        types_or: [python, pyi]
-        require_serial: true
+
+  - repo: https://github.com/astral-sh/ty-pre-commit
+    rev: v0.0.82
+    hooks:
       - id: ty
-        name: ty check
-        entry: uv run ty check
-        language: system
-        types_or: [python, pyi, toml]
-        pass_filenames: false
+        pass_filenames: false  # check the whole project, a change in one file can break another
+
+  - repo: local
+    hooks:
       - id: pytest
         name: pytest
         entry: uv run pytest -q

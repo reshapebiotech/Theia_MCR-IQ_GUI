@@ -90,7 +90,7 @@ def test_constructor_timeout() -> None:
 
     def factory(port: str, **kwargs: Any) -> Any:
         release.wait(5)
-        return FakeMCR(port)
+        return object()  # not a FakeMCR: the late worker must not pollute FakeMCR.instances for later tests
 
     with pytest.raises(MCRError) as info:
         connect(factory, timeout=0.2)

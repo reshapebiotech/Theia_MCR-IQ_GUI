@@ -93,7 +93,7 @@ just hooks     # install the pre-commit and pre-push git hooks
 just           # list every task
 ```
 
-The recipes in `justfile` wrap `uv run`; without [just](https://github.com/casey/just) run the same commands by hand, for example `uv run pytest`. The git hooks (`.pre-commit-config.yaml`) run ruff and ty on commit and the tests on push, using the tool versions from `uv.lock`.
+The recipes in `justfile` wrap `uv run`; without [just](https://github.com/casey/just) run the same commands by hand, for example `uv run pytest`. The git hooks (`.pre-commit-config.yaml`) use the official ruff and ty hooks on commit, pinned to the same versions as `uv.lock`, and run the tests on push.
 
 Tests run against a fake controller and need no hardware. The tests that build the real main window skip on a Linux machine without a display. CI runs the same four commands on Linux, macOS and Windows.
 
