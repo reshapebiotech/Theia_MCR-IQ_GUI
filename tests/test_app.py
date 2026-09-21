@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+import tkinter
 from collections.abc import Iterator
 from typing import Any
 
@@ -24,6 +25,17 @@ from theia_mcr_iq.gui.app import App
 from theia_mcr_iq.gui.keys import Key, SettingsKey
 
 PORT = "/dev/tty.fake"
+
+
+@pytest.fixture(autouse=True, scope="module")
+def shared_tcl_interpreter() -> Iterator[None]:
+    """Serve FreeSimpleGUI one long-lived Tcl interpreter for its version probes."""
+    # FreeSimpleGUI creates and drops a Tcl interpreter per packed container; on Windows
+    # that churn makes a later interpreter fail to read init.tcl within one process
+    interpreter = tkinter.Tcl()
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(tkinter, "Tcl", lambda *args, **kwargs: interpreter)
+        yield
 
 
 def fake_connect(port: str, **kwargs: Any) -> MCRSession:
