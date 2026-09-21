@@ -326,18 +326,21 @@ def cmd_move(ctx: Context, motor: Motor) -> int:
             ctx, session, lens, [motor], respect_limits=args.home and not args.no_limits
         )
         homed_from = session.home(motor) if args.home else None
+        start = session.positions()[motor]
         if absolute:
             position = session.move_abs(motor, args.steps)
         else:
             position = session.move_rel(
                 motor, sign * args.steps, backlash=not args.no_backlash
             )
+    moved = position - start
     payload = {
         "lens": lens.key,
         "motor": motor,
         "mode": args.mode,
         "steps": args.steps,
         "homed": args.home,
+        "moved": moved,
         "position": position,
         "position_absolute": args.home,
     }
@@ -345,7 +348,9 @@ def cmd_move(ctx: Context, motor: Motor) -> int:
     if absolute:
         human = f"{prefix}moved to step {position}"
     else:
-        human = f"{prefix}moved {sign * args.steps:+d} steps to {'step' if args.home else 'relative position'} {position}"
+        human = f"{prefix}moved {moved:+d} steps to {'step' if args.home else 'relative position'} {position}"
+    if not absolute and moved != sign * args.steps:
+        human += f" (requested {sign * args.steps:+d}, clamped by the step limits)"
     ctx.emit(payload, human)
     return EXIT_OK
 

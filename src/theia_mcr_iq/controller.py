@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 import threading
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
@@ -10,6 +11,10 @@ from typing import Any, Literal, Self
 
 from theia_mcr_iq import ports
 from theia_mcr_iq.lens_data import LensVariant
+
+if sys.platform != "win32":
+    import fcntl
+    import termios
 
 log = logging.getLogger(__name__)
 
@@ -146,6 +151,7 @@ class MCRSession:
         serial_number = _read_identity(
             mcr, board.readBoardSN, "sn_read", "board serial number"
         )
+        _claim_exclusive(mcr)
         log.info(
             "Connected to MCR board on %s (FW %s, SN %s)",
             port,
@@ -236,7 +242,7 @@ class MCRSession:
     def set_respect_limits(
         self, state: bool, motors: Iterable[Motor] = ("focus", "zoom")
     ) -> None:
-        """Tell the board whether moves may pass the PI limit switches (iris has none)."""
+        """Tell TheiaMCR whether to clamp focus/zoom moves to the PI switch; the iris is always clamped to 0..75."""
         for motor in motors:
             self.motor(motor).setRespectLimits(state)
 
@@ -321,8 +327,9 @@ def _construct_with_timeout(
             "timeout", f"Connection to {port} timed out after {timeout:.0f} s"
         )
     if "error" in outcome:
+        _discard_half_built(factory, port)
         raise MCRError(
-            "board_init", f"Connection to {port} failed", str(outcome["error"])
+            "board_init", f"No MCR board answered on {port}", str(outcome["error"])
         )
     return outcome["mcr"]
 
@@ -340,6 +347,39 @@ def _read_identity(
         log.warning("Could not read %s", what)
         return None
     return str(value)
+
+
+def _claim_exclusive(mcr: Any) -> None:
+    """On POSIX, flag our open tty exclusive so a second process gets EBUSY instead of sharing the board."""
+    if sys.platform == "win32":
+        return  # Windows serial handles are exclusive already
+    fd = getattr(getattr(mcr, "serialPort", None), "fd", None)
+    if fd is None:
+        return
+    try:
+        fcntl.ioctl(fd, termios.TIOCEXCL)
+    except OSError:
+        log.debug("Could not set exclusive access on the serial port", exc_info=True)
+
+
+def _discard_half_built(factory: Any, port: str) -> None:
+    """Drop the instance TheiaMCR cached for `port` when its constructor raised, closing any port it opened."""
+    instances = getattr(factory, "_instances", None)
+    if not isinstance(instances, dict):
+        return
+    instance = instances.pop(port, None)
+    if instance is None:
+        return
+    serial_port = getattr(instance, "serialPort", None) or getattr(
+        getattr(instance, "com", None), "serialPort", None
+    )
+    try:
+        if serial_port is not None:
+            serial_port.close()
+    except Exception:
+        log.debug(
+            "Ignoring error while closing a half-built MCR instance", exc_info=True
+        )
 
 
 def _close_quietly(mcr: Any) -> None:

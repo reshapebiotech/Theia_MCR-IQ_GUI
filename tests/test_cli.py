@@ -91,6 +91,7 @@ def test_relative_move_disables_limits(
     assert run(["focus", "rel", "-500", "--json"]) == 0
     out = json.loads(capsys.readouterr().out)
     assert out["position"] == -500 and out["position_absolute"] is False
+    assert out["moved"] == -500
     m = mcr()
     assert m.focus.calls[-1] == ("moveRel", (-500,), {"correctForBL": True})
     assert m.focus.respectLimits is False

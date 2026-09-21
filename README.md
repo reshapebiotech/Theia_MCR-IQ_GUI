@@ -30,6 +30,8 @@ uv run theia-mcr ports    # the CLI
 3. Move motors by a step count with the Tele/Wide, Near/Far and Open/Close buttons, or type a target step into a Current field and press Enter (or click the Zoom/Focus/Iris button) for an absolute move.
 4. For lenses with an internal filter, the two filter buttons switch the IR-cut position.
 
+After "Initialize without moving motors" the iris Open button does nothing until the iris has been closed, because TheiaMCR assumes the iris starts fully open at step 0.
+
 The gear icon opens the settings window: moving and homing speeds per motor, limit switch enforcement, backlash correction, and the board's communication path. Switching the path to UART or I2C disables USB and closes the program.
 
 ### Lens IQ
@@ -68,9 +70,13 @@ Options work before or after the command:
 | `--json` | Machine-readable result on stdout. Logs stay on stderr. |
 | `--quiet`, `--debug` | Log level. Default is INFO. |
 
+The iris has no limit switch. TheiaMCR treats step 0 as its fully open home and clamps every move to 0..75, so from a fresh start `iris open N` does nothing; use `iris abs N --home` or `iris close N`.
+
 Exit codes: 0 success, 1 board or connection failure, 2 usage error, 3 no serial port could be chosen, 4 no lens could be chosen or the lens has no limit switches, 5 the board rejected a move.
 
 The CLI reads the GUI's saved settings but never writes them.
+
+While the GUI or a CLI command holds the board, a second process gets a "port already in use" error instead of sharing the serial line. On macOS and Linux this relies on the exclusive-access flag the program sets on its own open port.
 
 ## Files and configuration
 

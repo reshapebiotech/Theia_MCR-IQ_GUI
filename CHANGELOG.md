@@ -21,6 +21,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Platform-neutral wording (serial port instead of COM port) and fonts; PNG window icon on macOS and Linux.
 - The Lens IQ expansion pack is detected at start-up and the Lens IQ checkbox is disabled when it is not installed.
 
+### Fixed
+
+- A second process opening the board's serial port on macOS or Linux is now refused as "already in use" instead of silently sharing the line.
+- Selecting a serial device that is not an MCR board reports "No MCR board answered" and releases the port TheiaMCR left open.
+- CLI move output reports the steps actually moved and says so when TheiaMCR clamped the request.
+
 ### Removed
 
 - `requirements.txt`, the Windows `AppData` settings path, the unused `numpy` dependency and the tkinter file picker for a missing lens data file.

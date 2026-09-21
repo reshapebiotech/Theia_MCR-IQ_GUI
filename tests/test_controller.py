@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
@@ -185,3 +185,27 @@ def test_irc_and_comm_path(fake_mcr_factory: Callable[..., FakeMCR]) -> None:
         assert mcr.IRC.states == [2]
         assert mcr.MCRBoard is not None and mcr.MCRBoard.paths == ["UART"]
     assert mcr.closed
+
+
+def test_constructor_exception_discards_cached_instance() -> None:
+    closed: list[str] = []
+
+    class HalfBuilt:
+        def __init__(self, port: str) -> None:
+            self.serialPort = type(
+                "Port", (), {"close": lambda self: closed.append(port)}
+            )()
+
+    class Factory:
+        _instances: ClassVar[dict[str, HalfBuilt]] = {}
+
+        def __new__(cls, port: str, **kwargs: Any) -> Any:
+            cls._instances[port] = HalfBuilt(port)
+            raise ValueError("invalid literal for int()")
+
+    with pytest.raises(MCRError) as info:
+        connect(Factory)
+    assert info.value.kind == "board_init"
+    assert "No MCR board answered" in info.value.message
+    assert Factory._instances == {}
+    assert closed == ["COM1"]
