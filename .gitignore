@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.py[cod]
+.theia-mcr/
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.DS_Store
+.vscode/
