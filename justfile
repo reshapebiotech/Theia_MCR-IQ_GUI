@@ -58,6 +58,14 @@ hooks-run:
 build:
     uv build
 
+# Build the CLI Docker image locally as theia-mcr-iq:dev
+docker-build:
+    docker build -t theia-mcr-iq:dev .
+
+# Run the CLI from the local image through the wrapper, e.g. `just docker-run lenses`
+docker-run *args:
+    THEIA_MCR_IMAGE=theia-mcr-iq:dev docker/theia-mcr {{args}}
+
 # Remove build, cache and test artifacts (keeps .venv and .theia-mcr)
 clean:
     rm -rf dist build .pytest_cache .ruff_cache

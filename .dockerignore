@@ -1,0 +1,12 @@
+.venv
+.git
+.theia-mcr
+dist
+build
+__pycache__
+.github
+.vscode
+.pytest_cache
+.ruff_cache
+tests
+docker
