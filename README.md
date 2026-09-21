@@ -36,6 +36,8 @@ The gear icon opens the settings window: moving and homing speeds per motor, lim
 
 Theia ships Lens IQ engineering-unit conversions as a separate module, `lensIQ_expansion`, to customers who bought a Lens IQ or calibrated lens. It is not published. When the module is importable the Lens IQ checkbox and calibration file picker work as in Theia's release; otherwise the checkbox is disabled and everything else runs normally.
 
+This is untested.
+
 ## CLI
 
 Every `theia-mcr` command connects to the board, does one thing, prints the result and disconnects. Nothing is remembered between commands, so a motor's position is unknown until it is homed in that same command.
