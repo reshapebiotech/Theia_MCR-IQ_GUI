@@ -50,4 +50,6 @@ def window_icon() -> bytes | str:
     """Return the window icon: PNG bytes, or a .ico path on Windows where Tk renders it better."""
     if sys.platform == "win32":
         return str(_exit_stack.enter_context(as_file(_ASSETS / "tl1250p.ico")))
-    return asset_bytes("tl1250p.png")  # Tk on macOS/Linux only applies PNG icons passed as data
+    return asset_bytes(
+        "tl1250p.png"
+    )  # Tk on macOS/Linux only applies PNG icons passed as data

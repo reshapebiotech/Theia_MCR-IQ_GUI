@@ -37,7 +37,9 @@ def test_real_package_resolves_to_repo_root() -> None:
     assert (root / "src" / "theia_mcr_iq").is_dir()
 
 
-def test_home_fallback_when_no_project(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_home_fallback_when_no_project(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     monkeypatch.delenv(paths.ENV_DATA_DIR)
     monkeypatch.setattr(paths, "project_root", lambda start=None: None)
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))

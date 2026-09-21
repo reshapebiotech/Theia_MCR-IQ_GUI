@@ -24,7 +24,13 @@ def test_variant_merges_family_values(variants: dict[str, LensVariant]) -> None:
     lens = variants["TL1250_N6"]
     assert lens.name == "TL1250P N6"
     assert lens.fam == "TW90"
-    assert (lens.zoom_steps, lens.zoom_pi, lens.focus_steps, lens.focus_pi, lens.iris_steps) == (
+    assert (
+        lens.zoom_steps,
+        lens.zoom_pi,
+        lens.focus_steps,
+        lens.focus_pi,
+        lens.iris_steps,
+    ) == (
         3227,
         3119,
         8390,
@@ -50,7 +56,22 @@ def test_irc_labels(variants: dict[str, LensVariant]) -> None:
 
 
 def test_flatten_skips_non_dict_entries() -> None:
-    assert lens_data.flatten({"comment": "x", "TLX": {"fam": "T", "zoomSteps": 1, "zoomPI": 1, "focusSteps": 1, "focusPI": 1, "irisSteps": 1}}) == {}
+    assert (
+        lens_data.flatten(
+            {
+                "comment": "x",
+                "TLX": {
+                    "fam": "T",
+                    "zoomSteps": 1,
+                    "zoomPI": 1,
+                    "focusSteps": 1,
+                    "focusPI": 1,
+                    "irisSteps": 1,
+                },
+            }
+        )
+        == {}
+    )
 
 
 def test_resolve_by_key_name_and_case(variants: dict[str, LensVariant]) -> None:

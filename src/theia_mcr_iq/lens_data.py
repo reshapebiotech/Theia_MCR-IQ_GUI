@@ -53,7 +53,11 @@ class LensVariant:
         labels = []
         for index, filter_key in enumerate((self.filter1, self.filter2), start=1):
             default = f"Filter {index}"
-            labels.append(IRC_FILTER_LABELS.get(filter_key.lower(), default) if self.has_irc else default)
+            labels.append(
+                IRC_FILTER_LABELS.get(filter_key.lower(), default)
+                if self.has_irc
+                else default
+            )
         return labels[0], labels[1]
 
 
@@ -63,7 +67,9 @@ def flatten(raw: dict[str, Any]) -> dict[str, LensVariant]:
     for family_key, family in raw.items():
         if not isinstance(family, dict):
             continue
-        variant_items = {k: v for k, v in family.items() if isinstance(v, dict) and "name" in v}
+        variant_items = {
+            k: v for k, v in family.items() if isinstance(v, dict) and "name" in v
+        }
         common = {k: v for k, v in family.items() if k not in variant_items}
         for variant_key, variant in variant_items.items():
             record = {**common, **variant}

@@ -27,7 +27,9 @@ DEFAULTS: dict[str, Any] = {
 class Settings(MutableMapping[str, Any]):
     """Dict-like settings that write themselves back to disk on every change."""
 
-    def __init__(self, path: Path, data: dict[str, Any] | None = None, autosave: bool = True) -> None:
+    def __init__(
+        self, path: Path, data: dict[str, Any] | None = None, autosave: bool = True
+    ) -> None:
         """Wrap `data` (or the defaults) and persist to `path` when autosave is on."""
         self.path = path
         self.autosave = autosave
