@@ -15,6 +15,9 @@ import serial.tools.list_ports
 log = logging.getLogger(__name__)
 
 ENV_PORT = "THEIA_MCR_PORT"
+USB_HWID_MARKER = (
+    "USB VID:PID"  # pyserial puts this in hwid for every USB serial adapter
+)
 
 # Substrings pyserial puts in its exception text when another process holds the port.
 _IN_USE_MARKERS = (
@@ -55,6 +58,11 @@ def list_ports() -> list[PortInfo]:
         for p in serial.tools.list_ports.comports()
     ]
     return sorted(ports, key=lambda p: p.device)
+
+
+def is_usb(port: PortInfo) -> bool:
+    """True when pyserial reports `port` as a USB serial adapter."""
+    return USB_HWID_MARKER in port.hwid
 
 
 def is_in_use_message(message: str) -> bool:
@@ -103,26 +111,30 @@ def check_port(port: str, timeout: float = 2.0) -> tuple[PortCheck, str]:
 def resolve_port(
     explicit: str | None,
     settings: Mapping[str, object],
-    available: Sequence[str],
+    available: Sequence[PortInfo],
     env: Mapping[str, str] | None = None,
 ) -> str:
-    """Pick a port: explicit flag, then $THEIA_MCR_PORT, then a saved port that is present, then the only port."""
+    """Pick a port: explicit flag, $THEIA_MCR_PORT, a saved port that is present, the only USB port, the only port."""
     env = os.environ if env is None else env
     if explicit:
         return explicit
     from_env = env.get(ENV_PORT, "")
     if from_env:
         return from_env
+    devices = [p.device for p in available]
     saved = str(settings.get("com_port", "") or "")
-    if saved and saved in available:
+    if saved and saved in devices:
         return saved
-    if len(available) == 1:
-        return available[0]
-    if not available:
+    usb = [p.device for p in available if is_usb(p)]
+    if len(usb) == 1:  # built-in UARTs and virtual ports never carry the board
+        return usb[0]
+    if len(devices) == 1:
+        return devices[0]
+    if not devices:
         raise PortResolutionError(
             "No serial ports found. Connect the MCR board or pass --port."
         )
-    listing = ", ".join(available)
+    listing = ", ".join(devices)
     raise PortResolutionError(
         f"Several serial ports found, pass --port to choose one: {listing}"
     )

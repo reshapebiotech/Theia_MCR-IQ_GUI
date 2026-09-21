@@ -76,6 +76,12 @@ def test_port_resolution_failures(capsys: pytest.CaptureFixture[str]) -> None:
     assert run(["info"], ports=two) == cli.EXIT_PORT
     assert "--port" in capsys.readouterr().err
     assert run(["--port", "COM4", "info"], ports=two) == 0
+    mixed = [
+        PortInfo("/dev/ttyS0", "", ""),
+        PortInfo("/dev/ttyUSB0", "", "USB VID:PID=0403:6015"),
+    ]
+    assert run(["info"], ports=mixed) == 0
+    assert mcr().port == "/dev/ttyUSB0"
 
 
 def test_lens_required_for_moves(capsys: pytest.CaptureFixture[str]) -> None:

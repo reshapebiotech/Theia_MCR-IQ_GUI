@@ -67,9 +67,8 @@ class Context:
 
     def resolve_port(self) -> str:
         """Pick the serial port from flag, environment, settings or the single attached device."""
-        available = [p.device for p in self.port_lister()]
         try:
-            return ports.resolve_port(self.args.port, self.settings, available)
+            return ports.resolve_port(self.args.port, self.settings, self.port_lister())
         except ports.PortResolutionError as exc:
             raise CliError(EXIT_PORT, str(exc)) from exc
 
