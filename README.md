@@ -25,15 +25,16 @@ uv run theia-mcr ports    # the CLI
 
 ## Run with Docker
 
-For Linux hosts that have Docker but no Python 3.11 or uv. Every GitHub release publishes the CLI as the image `ghcr.io/reshapebiotech/theia-mcr-iq` for amd64 and arm64, plus a wrapper script that runs it. The GUI is not in the image.
+For Linux hosts that have Docker but no Python 3.11 or uv. Every GitHub release publishes the CLI as the image `ghcr.io/reshapebiotech/theia-mcr-iq` for amd64 and arm64, plus a wrapper script that runs it. The GUI is not in the image. Nothing is installed on the host: the wrapper is a single `sh` script that runs from any folder.
 
 ```
+mkdir -p ~/theia-mcr && cd ~/theia-mcr
 curl -fsSLO https://github.com/reshapebiotech/Theia_MCR-IQ_GUI/releases/latest/download/theia-mcr
-sudo install -m 755 theia-mcr /usr/local/bin/
-theia-mcr ports
+chmod +x theia-mcr
+./theia-mcr ports
 ```
 
-The first run pulls the image. From then on `theia-mcr` takes the same commands and options as the native install, for example `theia-mcr --lens TL410_R6 focus rel 100`.
+The first run pulls the image. From then on `./theia-mcr` takes the same commands and options as the native install, for example `./theia-mcr --lens TL410_R6 focus rel 100`. Removing the folder and the image (`docker image rm ghcr.io/reshapebiotech/theia-mcr-iq:4.0.0`) removes everything.
 
 The wrapper runs `docker run --rm` with the host's `/dev` mounted and device cgroup rules for USB serial (major 188) and CDC-ACM (major 166) devices. A board plugged in after the image was pulled is visible at once, and the container does not need `--privileged`. It runs as root, so it needs no `dialout` membership, and it has no network. `~/.theia-mcr` is mounted as the data directory, so a `limits.json` override and a lens or port saved by the GUI are read. `THEIA_MCR_PORT` and `THEIA_MCR_LENS` pass through.
 
@@ -43,7 +44,7 @@ The wrapper runs `docker run --rm` with the host's `/dev` mounted and device cgr
 | `THEIA_MCR_DATA_DIR` | Host folder mounted for settings and `limits.json`. Default `~/.theia-mcr`. |
 | `THEIA_MCR_PRIVILEGED` | Set to `1` to run with `--privileged` instead of the cgroup rules, for rootless Docker where the rules do not apply. |
 
-Offline hosts: download `theia-mcr-iq-<version>-linux-<arch>.tar.gz` from the release page and run `docker load < theia-mcr-iq-4.0.0-linux-amd64.tar.gz`. It restores the tag the wrapper expects, so nothing else needs configuring. The wheel on the same page is for hosts with Python 3.11 or newer that do not want Docker.
+Offline hosts: copy `theia-mcr-iq-<version>-linux-<arch>.tar.gz` from the release page to the host next to the wrapper and run `docker load < theia-mcr-iq-4.0.0-linux-amd64.tar.gz`. It restores the tag the wrapper expects, so nothing else needs configuring. The wheel on the same page is for hosts with Python 3.11 or newer that do not want Docker.
 
 Serial passthrough only works when Docker runs on the Linux kernel that owns the USB device. Docker Desktop on macOS and Windows runs a virtual machine without USB serial access, so there only `ports`, `lenses` and `--help` are useful.
 

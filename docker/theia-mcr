@@ -1,9 +1,9 @@
 #!/bin/sh
 # Run the theia-mcr CLI from its Docker image as if it were installed locally.
 #
-# Install:  sudo install -m 755 theia-mcr /usr/local/bin/
-# Use:      theia-mcr ports
-#           theia-mcr --lens TL410_R6 focus rel 100
+# Copy this file to any folder on the host, chmod +x it, and run it from there:
+#   ./theia-mcr ports
+#   ./theia-mcr --lens TL410_R6 focus rel 100
 #
 # The image is pulled on first use. Environment:
 #   THEIA_MCR_IMAGE       image to run (default below; set to a `docker load`ed tag for offline hosts)
