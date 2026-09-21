@@ -1,98 +1,96 @@
-# Theia Technologies Lens Controller Interface
+# Theia MCR IQ lens control
 
-Theia Technologies has developed a TheiaMCR™ Python module that allows easy control of Theia's motorized lenses.
+Desktop GUI and command-line tool for Theia Technologies' MCR IQ motor control boards, which drive the focus, zoom, iris and IR-cut filter motors of Theia's motorized lenses. The code talks to the board over USB serial through Theia's [TheiaMCR](https://github.com/cliquot22/TheiaMCR) module and runs on macOS, Linux and Windows.
 
-## MCR IQ controller GUI
+This repository is a reworked fork of Theia's [Theia_MCR-IQ_GUI](https://github.com/cliquot22/Theia_MCR-IQ_GUI) v3.2. See [CHANGELOG.md](CHANGELOG.md) for what changed.
 
-Theia's MCR motor control board can control focus, zoom, iris, and IRC filters in a Theia motorized lens.  This MCR lens controller formats the target motor steps into specific commands that can be sent to the MCR motor control board.  The lens will respond to the commands.  This program keeps track of the lens motor positions (there is no feedback from the lens).  
+## Requirements
 
-With the purchase of a Theia IQ lens or calibrated lens, a data file can be installed to unlock additional features of the program.  These optional additional features are not required to control the lens using this application.  
+- [uv](https://docs.astral.sh/uv/). It installs the pinned Python 3.13 (with Tk) on first use.
+- An MCR IQ board connected by USB. It appears as `/dev/tty.usbserial-*` on macOS, `/dev/ttyUSB*` or `/dev/ttyACM*` on Linux, and `COMn` on Windows.
 
-## Core module (installed via pip)
+On Linux your user needs access to the serial device, usually by joining the `dialout` group.
 
-- **`TheiaMCR`** - MCR IQ 400 motor control board interface
-
-MCR IQ 400 board information: [Theia Technologies](https://www.theiatech.com/lenses/accessories/mcr/)
-
-# Requirements
-
-- Python 3.11 or higher
-
-Install all dependencies:
+## Install and run
 
 ```
-pip install -r requirements.txt
+git clone <this repository>
+cd Theia_MCR-IQ_GUI
+uv sync
+uv run theia-mcr-gui      # the GUI
+uv run theia-mcr ports    # the CLI
 ```
 
-Or install individually:
+`uv sync` creates `.venv/` with the locked dependencies. Both commands are also available as console scripts inside that environment, and `uv run python -m theia_mcr_iq` starts the GUI too.
+
+## GUI
+
+1. Pick the lens model and the serial port. Click Refresh to rescan ports.
+2. Click "Initialize program and home motors" to connect and drive every motor to its limit switch, or "Initialize without moving motors" to connect and leave the lens where it is. Homing needs a lens with PI limit switches and is required for absolute moves.
+3. Move motors by a step count with the Tele/Wide, Near/Far and Open/Close buttons, or type a target step into a Current field and press Enter (or click the Zoom/Focus/Iris button) for an absolute move.
+4. For lenses with an internal filter, the two filter buttons switch the IR-cut position.
+
+The gear icon opens the settings window: moving and homing speeds per motor, limit switch enforcement, backlash correction, and the board's communication path. Switching the path to UART or I2C disables USB and closes the program.
+
+### Lens IQ
+
+Theia ships Lens IQ engineering-unit conversions as a separate module, `lensIQ_expansion`, to customers who bought a Lens IQ or calibrated lens. It is not published. When the module is importable the Lens IQ checkbox and calibration file picker work as in Theia's release; otherwise the checkbox is disabled and everything else runs normally.
+
+## CLI
+
+Every `theia-mcr` command connects to the board, does one thing, prints the result and disconnects. Nothing is remembered between commands, so a motor's position is unknown until it is homed in that same command.
 
 ```
-pip install FreeSimpleGUI TheiaMCR lensIQ numpy pyserial
+theia-mcr ports                        # list serial ports
+theia-mcr lenses                       # list known lens models and their extents
+theia-mcr info                         # firmware revision and board serial number
+theia-mcr home [focus|zoom|iris|all]   # drive motors to their limit switch
+theia-mcr zoom wide 500                # relative move: wide/tele, near/far, open/close
+theia-mcr focus rel -200               # relative move by signed steps
+theia-mcr zoom abs 1500 --home         # home first, then move to an absolute step
+theia-mcr irc 2                        # IR-cut filter position 1 or 2
+theia-mcr set-path UART --yes          # switch the board off USB (irreversible from here)
 ```
 
-# Quick start
+Options work before or after the command:
 
-1. Install dependencies (see above).
-2. Connect the MCR IQ 400 board (or MCR IQ 600, etc.) via USB -- this creates a virtual COM port. See the MCR instructions for driver setup.
-3. Run the application:
-   ```
-   python Theia_lensIQ_GUI.py
-   ```
-4. Select the **COM port** and **lens model** from the drop-down lists.
-   - Click **Refresh** to rescan available COM ports if your device does not appear.
-   - The application detects incorrect port types (e.g., Bluetooth adapters) and displays a descriptive error.
-5 (optional). To enable IQ and calibrated lens functions with the purchase of a special IQ or calibrated lens, load a calibration file:
-   - Check the **lensIQ** checkbox to reveal the calibration file browser.
-   - Browse to the JSON calibration file that came with your lens.  For IQ lenses™, choose the latest dataset .json file from the selections in Dropbox.  For calibrated lenses, scan the QR code on the lens for the correct file. 
-   - The file must be compatible with the selected lens model.
+| Option | Meaning |
+|---|---|
+| `--port PORT` | Serial port. Default: `$THEIA_MCR_PORT`, then the port saved by the GUI if present, then the only port found. |
+| `--lens KEY` | Lens key or name from `theia-mcr lenses`. Default: `$THEIA_MCR_LENS`, then the lens saved by the GUI. |
+| `--home` | On move commands: home the motor first. Required for `abs`. |
+| `--speed PPS` | Motor speed for this command. Default: the speed saved by the GUI. |
+| `--no-limits` | Allow absolute moves past the limit switch. |
+| `--no-backlash` | Skip backlash correction on relative moves. |
+| `--timeout S` | Connection timeout, default 5 seconds. |
+| `--json` | Machine-readable result on stdout. Logs stay on stderr. |
+| `--quiet`, `--debug` | Log level. Default is INFO. |
 
-## Initializing motors
+Exit codes: 0 success, 1 board or connection failure, 2 usage error, 3 no serial port could be chosen, 4 no lens could be chosen or the lens has no limit switches, 5 the board rejected a move.
 
-Two initialization options are available:
+The CLI reads the GUI's saved settings but never writes them.
 
-| Button | Behavior |
-|--------|----------|
-| **Init** | Connects to the MCR board without moving motors; limit switches not enforced. Use to reconnect without disturbing the lens position HOWEVER lens IQ™ functions will not be active. |
-| **Init and home** | Connects and moves all motors to their PI limit switch home positions; limit switches enforced. Required before using lens IQ™ calibrated functions. |
+## Files and configuration
 
-After initialization, the step position fields and motor control buttons become active.
+Settings are stored in `.theia-mcr/settings.json` at the repository root (gitignored). Set `THEIA_MCR_DATA_DIR` to use another folder; when the package is installed outside a checkout the folder is `~/.theia-mcr`. Dropping a `limits.json` into that folder overrides the packaged lens table.
 
-## Motor control
+TheiaMCR writes its own communication logs under `~/.local/share/TheiaMCR/log` (macOS and Linux) or `%LOCALAPPDATA%\TheiaMCR\log` (Windows).
 
-- **Relative movement** - Use Wide/Tele, Near/Far, and Open/Close buttons to move motors by the step count shown in the adjacent field.
-- **Absolute position** - Enter a step number in the current position field and press Enter (or click the Abs button) to move to that position. Requires **Init and home**.
-- **IRC filter** - For lenses with internal filters, two filter buttons appear with labels that match the lens model (e.g., visible only, clear, band pass, long pass). Click to toggle between filter positions.
+## Development
 
-## Settings
+```
+uv sync --all-groups
+uv run ruff check && uv run ruff format --check
+uv run ty check
+uv run pytest
+```
 
-Click **Settings** to configure:
+Tests run against a fake controller and need no hardware. The tests that build the real main window skip on a Linux machine without a display. CI runs the same four commands on Linux, macOS and Windows.
 
-- **Motor speeds** (pps) for focus, zoom, and iris
-- **Homing speeds** for each motor
-- **Limit switch enforcement** (on/off)
-- **Backlash correction** (on/off)
-- **Communication path** - Change MCR communication from USB to UART or I2C (this disconnects USB and exits the application)
+Layout: `src/theia_mcr_iq/controller.py` is the shared board session, `cli.py` the command-line tool, `gui/` the FreeSimpleGUI application, `lens_data.py` the lens table model, and `paths.py`, `resources.py`, `settings.py` handle files.
 
-## Help
+## License and contact
 
-Click **Help** for context-sensitive links to documentation.
+BSD 3-Clause, see [license](license). Copyright 2023-2026 Theia Technologies.
 
-# License
-
-Theia Technologies BSD 3-clause license  
-Copyright 2023-2026 Theia Technologies
-
-# Contact information
-
-For more information:  
-[Theia Technologies](https://www.theiatech.com/lenses/accessories/mcr/)
-
-or contact:  
-Mark Peterson at Theia Technologies  
-[mpeterson@theiatech.com](mailto://mpeterson@theiatech.com)
-
-To report any security concerns or issues privately: 
-See [SECURITY.md](SECURITY.md) for detailed reporting instructions.
-
-# Revision
-v.3.2
+Theia's MCR controller page: <https://www.theiatech.com/lenses/accessories/mcr/>. Upstream author: Mark Peterson, <mpeterson@theiatech.com>. Security reports: see [SECURITY.md](SECURITY.md).
