@@ -1,131 +1,95 @@
-# GUI actions for Theia_lensIQ_GUI.py
-#
-# v.1.0.1 250812 removed MCR references
-# v.1.0.0 250811 extracted from Theia_lensIQ_GUI.py v.2.5.7
+"""Enable/disable groups of main-window controls and show the controller status."""
 
-class GUIActions:
-    controllerStatusList = {
-        'notInit': ('Not initialized','red'),                   # default
-        'init': ('Initializing', 'yellow'),                     # -- in motion
-        'ready': ('Ready', 'green'),                            # ready to move     
-        'moving': ('Moving','yellow'),                          # -- in motion
-        'posUnknown': ('Position unknown','lightgreen'),        # set if steps exceeds min/max steps at any point, reset by initializing
-        'error': ('ERROR', 'red')                               # program or data error
-    }
+from __future__ import annotations
 
-    def __init__(self, gui):
-        '''
-        These are the action functions that integrate with the main window GUI.  
-        # input: 
-        - gui: the main GUI object
-        '''
-        self.GUIWindow = gui
+from typing import Any, Literal
 
-        self.absMoveInitialized = False  # Flag to check if absolute movement is initialized
-        self.regardBacklash = False
-        self.regardLimits = False
-        self.readyStatus = 'notInit'
+from theia_mcr_iq.gui.keys import Key
 
-    # enableLiveFrame
-    def enableLiveFrame(self, enable:bool=True, absoluteInit:bool=False):
-        '''
-        Enable buttons and inputs in the live frame. 
-        ### input
-        - enable (optional: True): state
-        - absoluteInit (optional: False): enable absolute motor movements from home positions
-        ### global
-        - absMoveInit: set if relativeOnly is False
-        '''
-        self.absMoveInitialized = absoluteInit
+Status = Literal["notInit", "init", "ready", "moving", "posUnknown", "error"]
 
-        # relative movement buttons
-        componentList = ['moveTeleBtn', 'moveWideBtn', 'moveNearBtn', 'moveFarBtn', 'moveOpenBtn', 'moveCloseBtn', 
-                         'zoomCurFld', 'focusCurFld', 'irisCurFld', 'zoomStepFld', 'focusStepFld', 'irisStepFld']
-        for component in componentList:
-            self.GUIWindow[component].update(disabled = not enable)
+STATUS_DISPLAY: dict[Status, tuple[str, str]] = {
+    "notInit": ("Not initialized", "red"),
+    "init": ("Initializing", "yellow"),
+    "ready": ("Ready", "green"),
+    "moving": ("Moving", "yellow"),
+    "posUnknown": ("Position unknown", "lightgreen"),
+    "error": ("ERROR", "red"),
+}
 
-        # absolute movement buttons
-        if absoluteInit:
-            componentList = ['moveZoomAbsBtn', 'moveFocusAbsBtn', 'moveIrisAbsBtn']
-            for component in componentList:
-                self.GUIWindow[component].update(disabled = not enable)
-        return
-    
-    # enableLiveFrameAbs
-    def enableLiveFrameAbs(self, enable:bool=True):
-        '''
-        Enable buttons and inputs for absolute movements. 
-        ### input
-        - enable (bool): state
-        '''
-        componentList = ['moveZoomAbsBtn', 'moveFocusAbsBtn', 'moveIrisAbsBtn']
-        for component in componentList:
-            self.GUIWindow[component].update(disabled = not enable)
-        return
+_RELATIVE_CONTROLS = (
+    Key.MOVE_TELE,
+    Key.MOVE_WIDE,
+    Key.MOVE_NEAR,
+    Key.MOVE_FAR,
+    Key.MOVE_OPEN,
+    Key.MOVE_CLOSE,
+    Key.ZOOM_CUR,
+    Key.FOCUS_CUR,
+    Key.IRIS_CUR,
+    Key.ZOOM_STEP,
+    Key.FOCUS_STEP,
+    Key.IRIS_STEP,
+)
+_ABSOLUTE_CONTROLS = (Key.MOVE_ZOOM_ABS, Key.MOVE_FOCUS_ABS, Key.MOVE_IRIS_ABS)
+_IRC_CONTROLS = (Key.IRC_1, Key.IRC_2)
 
-    # enableLiveFrameIRC
-    def enableLiveFrameIRC(self, enable:bool=True):
-        '''
-        Enable IRC filter buttons.
-        ### input
-        - enable (bool): state
-        '''
-        componentList = ['IRCBtn1', 'IRCBtn2']
-        for component in componentList:
-            self.GUIWindow[component].update(disabled = not enable)
-        return
-    
-    # enableInitHomeBtn
-    def enableInitHomeBtn(self, enable:bool=True):
-        '''
-        Enable the initialize and home motors button.  PI is required in the lens for this operation. 
-        ### input
-        - enable (bool): state
-        '''
-        self.GUIWindow['motorInitHomeBtn'].update(disabled = not enable)
-        self.GUIWindow['lensIQCheckbox'].update(disabled = not enable)
-        if not enable:
-            self.GUIWindow['lensIQCheckbox'].update(value=False)
-        return
-    
-    # set the regard limits flag in MCR module
-    def setRegardLimits(self, state:bool=True) -> bool:
-        '''
-        Set the regard limits flag in MCR module. 
-        Limit steps to avoid going past the hard stop.  
-        This setting is stored in the MCRControl.py variables (not local)
-        ### input: 
-        - state: the regard setting
-        ### return: 
-        - state: the updated regard limits setting
-        '''
-        self.regardLimits = state
-        self.enableLiveFrameAbs(state)
+
+class GuiActions:
+    """UI-state helper for the main window; it never talks to the motor controller."""
+
+    def __init__(self, window: Any, lens_iq_available: bool) -> None:
+        """Bind to `window`; `lens_iq_available` gates whether the Lens IQ checkbox may ever be enabled."""
+        self.window = window
+        self.lens_iq_available = lens_iq_available
+        self.abs_move_initialized = False
+        self.regard_backlash = False
+        self.regard_limits = False
+        self.status: Status = "notInit"
+
+    def enable_live_frame(
+        self, enable: bool = True, absolute_init: bool = False
+    ) -> None:
+        """Enable the relative-move controls, and the absolute ones too when the motors were homed."""
+        self.abs_move_initialized = absolute_init
+        for key in _RELATIVE_CONTROLS:
+            self.window[key].update(disabled=not enable)
+        if absolute_init:
+            self.enable_live_frame_abs(enable)
+
+    def enable_live_frame_abs(self, enable: bool = True) -> None:
+        """Enable the absolute-move buttons."""
+        for key in _ABSOLUTE_CONTROLS:
+            self.window[key].update(disabled=not enable)
+
+    def enable_live_frame_irc(self, enable: bool = True) -> None:
+        """Enable the IRC filter buttons."""
+        for key in _IRC_CONTROLS:
+            self.window[key].update(disabled=not enable)
+
+    def enable_init_home_btn(self, enable: bool = True) -> None:
+        """Enable the home-and-initialize button and the Lens IQ checkbox; both need a lens with PI."""
+        self.window[Key.INIT_HOME].update(disabled=not enable)
+        checkbox_enabled = enable and self.lens_iq_available
+        self.window[Key.LENS_IQ_CHECKBOX].update(disabled=not checkbox_enabled)
+        if not checkbox_enabled:
+            self.window[Key.LENS_IQ_CHECKBOX].update(value=False)
+
+    def set_regard_limits(self, state: bool = True) -> bool:
+        """Record the limit-switch setting and mirror it on the absolute-move buttons."""
+        self.regard_limits = state
+        self.enable_live_frame_abs(state)
         return state
 
-    # set the backlash flag in MCR move relative commands
-    def setRegardBacklash(self,state:bool=True) -> bool:
-        '''
-        Set the backalsh flag in the MCR move relative command.   
-        *This function is not active*
-        ### input
-        - state: the regard setting (not used)
-        ### return: 
-        - state: the updated regard backlash setting
-        '''
-        self.regardBacklash = state
+    def set_regard_backlash(self, state: bool = True) -> bool:
+        """Record whether relative moves should apply backlash correction."""
+        self.regard_backlash = state
         return state
 
-    # set the controller status indicators
-    def setStatus(self, status:str='notInit') -> None:
-        '''
-        Set the status indicators to the current controller status.  
-        ### input:
-        - status: the new status (from controllerStatusList)
-        '''
-        self.readyStatus = status
-        
-        self.GUIWindow['fldStatus'].update(GUIActions.controllerStatusList[self.readyStatus][0])
-        self.GUIWindow['fldStatus'].update(background_color=GUIActions.controllerStatusList[self.readyStatus][1])
-        self.GUIWindow.refresh()
-        return
+    def set_status(self, status: Status = "notInit") -> None:
+        """Show `status` in the status field with its color."""
+        self.status = status
+        text, color = STATUS_DISPLAY[status]
+        self.window[Key.STATUS].update(text)
+        self.window[Key.STATUS].update(background_color=color)
+        self.window.refresh()

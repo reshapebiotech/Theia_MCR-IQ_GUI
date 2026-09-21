@@ -31,6 +31,11 @@ CommunicationPath = Literal["UART", "I2C", "USB"]
 
 DEFAULT_CONNECT_TIMEOUT = 5.0
 
+_PRECHECK_KINDS: dict[ports.PortCheck, ErrorKind] = {
+    ports.PortCheck.IN_USE: "port_in_use",
+    ports.PortCheck.UNRESPONSIVE: "port_unresponsive",
+}
+
 
 class MCRError(Exception):
     """A classified failure talking to the MCR board."""
@@ -108,11 +113,7 @@ class MCRSession:
         if precheck:
             check, message = port_checker(port)
             if check is not ports.PortCheck.OK:
-                kind: ErrorKind = {
-                    ports.PortCheck.IN_USE: "port_in_use",
-                    ports.PortCheck.UNRESPONSIVE: "port_unresponsive",
-                }.get(check, "port_error")
-                raise MCRError(kind, message)
+                raise MCRError(_PRECHECK_KINDS.get(check, "port_error"), message)
 
         factory = mcr_factory or _default_factory()
         mcr = _construct_with_timeout(

@@ -1,469 +1,589 @@
-# GUI window creation for Theia_lensIQ_GUI
-#
-# v.1.0.0 250811 initial creation extracted from v.2.5.7 Theia_lensIQ_GUI.py
-# v.2.0.0 250903 moved LensIQ GUI setup into this file
+"""Window layouts and the small modal windows (settings, help)."""
 
-# pyright: reportOptionalMemberAccess=false
-
-import FreeSimpleGUI as sg
-from theia_mcr_iq import resources
-from theia_mcr_iq.gui import help_links as help
-import webbrowser as web
+from __future__ import annotations
 
 import logging
+import webbrowser
+from typing import Any
+
+import FreeSimpleGUI as sg
+
+from theia_mcr_iq import resources
+from theia_mcr_iq.gui import help_links
+from theia_mcr_iq.gui.keys import Key, SettingsKey
+
 log = logging.getLogger(__name__)
 
-TheiaColorTheme = 'LightGrey1'
-TheiaWhiteColor = '#FFFFFF'
-TheiaGreenColor = '#006633'
-TheiaDarkBlueColor = '#333399'
-TheiaLightYellowColor = "#FFFFEC"
-TheiaDarkGrayColor = '#666666'  
-TheiaRedColor = '#FF0000'
-IRCSelectedColor = TheiaGreenColor                  # color for selected IRC filter
+THEME = "LightGrey1"
+WHITE = "#FFFFFF"
+GREEN = "#006633"
+DARK_BLUE = "#333399"
+LIGHT_YELLOW = "#FFFFEC"
+DARK_GRAY = "#666666"
+IRC_SELECTED_COLOR = GREEN
 
-# mainGUILayout
-def mainGUILayout():
-    '''
-    Main GUI layout. 
-    Create the GUI window for the main window.  
-    There is a live motor control section, measurement section, settings section, and optional monitor 
-    section when the test is running.  
-    The section for converting from engineering units to motor steps is supported by Lens IQ module functions.  
-    ### input:  
-    - settingsIconPath: the path to the settings gear icon
-    ### return: 
-    [handle to the window]
-    '''
-    sg.theme(TheiaColorTheme) 
-    sg.set_options(button_color=[TheiaWhiteColor, TheiaDarkBlueColor], input_elements_background_color=TheiaLightYellowColor)
-    # footer frame
-    footerFrame = [
-        [sg.Text(f'v. rev.', size=(12,1), font='Helvetica 8', key='fldRevision'),
-            sg.Text('', size=(20,1), font='Helvetica 8', key='fldFWRev'),
-            sg.Text('', size=(20,1), font='Helvetica 8', key='fldSNBoard'),
+# Helvetica is the one family Tk maps to a platform sans-serif everywhere.
+FONT_SMALL = ("Helvetica", 8)
+FONT_HEADER = ("Helvetica", 12, "underline")
+
+Layout = list[list[Any]]
+
+
+def apply_theme() -> None:
+    """Set the global FreeSimpleGUI theme and button colors; call once before creating windows."""
+    sg.theme(THEME)
+    sg.set_options(
+        button_color=[WHITE, DARK_BLUE], input_elements_background_color=LIGHT_YELLOW
+    )
+
+
+def _readonly_input(default: str, key: str, **kwargs: Any) -> sg.Input:
+    """Input field styled the same way for every numeric field in the main window."""
+    return sg.Input(
+        default,
+        size=(12, 1),
+        justification="center",
+        disabled_readonly_background_color=DARK_GRAY,
+        key=key,
+        **kwargs,
+    )
+
+
+def main_layout() -> Layout:
+    """Main window: lens and port selection, motor moves, IRC filter, Lens IQ section, footer."""
+    footer = [
+        [
+            sg.Text("v. rev.", size=(12, 1), font=FONT_SMALL, key=Key.REVISION),
+            sg.Text("", size=(20, 1), font=FONT_SMALL, key=Key.FW_REV),
+            sg.Text("", size=(20, 1), font=FONT_SMALL, key=Key.BOARD_SN),
             sg.Push(),
-            sg.Image(data=resources.asset_bytes('help.png'), key='helpPopup', enable_events=True),
-            sg.Image(data=resources.asset_bytes('cog.png'), key='settingsPopup', enable_events=True),
-            sg.Button('Quit', size=(12,1), key="exitBtn")]
+            sg.Image(
+                data=resources.asset_bytes("help.png"),
+                key=Key.HELP_POPUP,
+                enable_events=True,
+            ),
+            sg.Image(
+                data=resources.asset_bytes("cog.png"),
+                key=Key.SETTINGS_POPUP,
+                enable_events=True,
+            ),
+            sg.Button("Quit", size=(12, 1), key=Key.EXIT),
+        ]
+    ]
+    header = [
+        [
+            sg.Column(
+                [
+                    [
+                        sg.Text("Lens family", size=(10, 1)),
+                        sg.Combo(
+                            [], size=(18, 10), enable_events=True, key=Key.LENS_FAMILY
+                        ),
+                    ]
+                ]
+            )
+        ],
+        [
+            sg.Column(
+                [
+                    [
+                        sg.Text("Serial port", size=(10, 1)),
+                        sg.Combo([], size=(18, 10), enable_events=True, key=Key.PORT),
+                        sg.Button("Refresh", size=(6, 1), key=Key.PORT_REFRESH),
+                    ]
+                ]
+            )
+        ],
+        [
+            sg.Column(
+                [
+                    [
+                        sg.Button(
+                            "Initialize program\nand home motors",
+                            size=(14, 2),
+                            key=Key.INIT_HOME,
+                        ),
+                        sg.Button(
+                            "Initialize without\nmoving motors",
+                            size=(14, 2),
+                            key=Key.INIT_NO_MOVE,
+                        ),
+                        sg.Frame(
+                            "Status",
+                            [
+                                [
+                                    sg.Text(
+                                        "",
+                                        key=Key.STATUS,
+                                        size=(12, 1),
+                                        justification="center",
+                                    )
+                                ]
+                            ],
+                        ),
+                    ]
+                ],
+                element_justification="center",
+                expand_x=True,
+            )
+        ],
+    ]
+    relative_moves = [
+        [
+            sg.Button("Tele", size=(12, 1), key=Key.MOVE_TELE),
+            _readonly_input("1000", Key.ZOOM_STEP),
+            sg.Button("Wide", size=(12, 1), key=Key.MOVE_WIDE),
+        ],
+        [
+            sg.Button("Near", size=(12, 1), key=Key.MOVE_NEAR),
+            _readonly_input("1000", Key.FOCUS_STEP),
+            sg.Button("Far", size=(12, 1), key=Key.MOVE_FAR),
+        ],
+        [
+            sg.Button("Open", size=(12, 1), key=Key.MOVE_OPEN),
+            _readonly_input("10", Key.IRIS_STEP),
+            sg.Button("Close", size=(12, 1), key=Key.MOVE_CLOSE),
+        ],
+    ]
+    current_positions = [
+        [_readonly_input("0", Key.ZOOM_CUR, pad=(6, 6))],
+        [_readonly_input("0", Key.FOCUS_CUR, pad=(6, 6))],
+        [_readonly_input("0", Key.IRIS_CUR, pad=(6, 6))],
+    ]
+    absolute_moves = [
+        [sg.Button("Zoom", size=(12, 1), key=Key.MOVE_ZOOM_ABS, disabled=True)],
+        [sg.Button("Focus", size=(12, 1), key=Key.MOVE_FOCUS_ABS, disabled=True)],
+        [sg.Button("Iris", size=(12, 1), key=Key.MOVE_IRIS_ABS, disabled=True)],
+    ]
+    irc = [
+        [
+            sg.Text("Internal filter:", size=(12, 1)),
+            sg.Button("Filter 1\n(Visible)", size=(11, 2), key=Key.IRC_1),
+            sg.Button("Filter 2\n(Visible + IR)", size=(11, 2), key=Key.IRC_2),
+        ]
+    ]
+    lens_iq_file = [
+        [
+            sg.Checkbox(
+                "Lens IQ or calibrated lens was purchased from Theia and data file was downloaded.",
+                key=Key.LENS_IQ_CHECKBOX,
+                default=False,
+                enable_events=True,
+            )
+        ],
+        [
+            sg.pin(sg.Text("Data file:", key=Key.CAL_FILE_TEXT, visible=False)),
+            sg.pin(
+                sg.Input(
+                    "Select...",
+                    key=Key.CAL_FILE,
+                    disabled=True,
+                    size=(30, 1),
+                    visible=False,
+                )
+            ),
+            sg.pin(
+                sg.Input("", key=Key.CAL_FILE_FULL, visible=False, enable_events=True)
+            ),
+            sg.pin(
+                sg.FileBrowse(
+                    "Browse",
+                    file_types=([("*.json", "*.json")]),
+                    key=Key.CAL_FILE_BROWSE,
+                    target=Key.CAL_FILE_FULL,
+                    visible=False,
+                )
+            ),
+        ],
+    ]
+    lens_iq = [
+        [sg.Column(lens_iq_file, expand_x=True)],
+        [
+            sg.pin(
+                sg.Column(
+                    lens_iq_layout(),
+                    expand_x=True,
+                    visible=False,
+                    key=Key.LENS_IQ_FRAME,
+                )
+            )
+        ],
+    ]
+    return [
+        [
+            sg.Column(
+                [
+                    [
+                        sg.Image(data=resources.asset_bytes("theia_logo.png")),
+                        sg.Column(header),
+                    ]
+                ],
+                expand_x=True,
+            )
+        ],
+        [sg.Frame("Lens IQ™", lens_iq, expand_x=True)],
+        [
+            sg.Frame("Relative move", relative_moves),
+            sg.Frame("Current", current_positions),
+            sg.Frame("Absolute move", absolute_moves),
+        ],
+        [sg.Column(irc)],
+        [sg.Frame("", footer, expand_x=True)],
     ]
 
-    # Live lens motor control section
-    # lens family sub-frame
-    lensFamFrame = [
-        [sg.Text('Lens family', size=(10,1)), sg.Combo([], size=(18,10), enable_events=True, key='cp_lensFam')]
-        ]
-    # comPort selection sub-frame
-    comPortFrame = [
-        [sg.Text('Com port', size=(10,1)), sg.Combo([], size=(18,10), enable_events=True, key="cp_port"), 
-            sg.Button('Refresh', size=(6,1), key='cp_refresh')],
-        ]
-    # initialize motor control sub-frame
-    initMotorsFrame = [
-        [sg.Button('Initialize program\nand home motors', size=(14,2), key='motorInitHomeBtn'),
-            sg.Button('Initialize without\nmoving motors', size=(14,2), key='motorInitBtn'),
-            sg.Frame('Status', [[sg.Text('', key='fldStatus', size=(12,1), justification='center')]]) ]
-        ]
-    # lens header including picture and setup functions
-    headerFrame = [
-        [sg.Column(lensFamFrame)],
-        [sg.Column(comPortFrame)],
-        [sg.Column(initMotorsFrame, element_justification='center', expand_x=True)]
-        ]
 
-    # motor control sub-frames
-    defaultSteps = '1000'
-    relMoveFrame = [
-        [sg.Button('Tele', size=(12,1), key='moveTeleBtn'), sg.Input(defaultSteps, size=(12,1), justification='center', disabled_readonly_background_color=TheiaDarkGrayColor, key='zoomStepFld'), 
-            sg.Button('Wide', size=(12,1), key='moveWideBtn')],
-        [sg.Button('Near', size=(12,1), key='moveNearBtn'), sg.Input(defaultSteps, size=(12,1), justification='center', disabled_readonly_background_color=TheiaDarkGrayColor, key='focusStepFld'), 
-            sg.Button('Far', size=(12,1), key='moveFarBtn')],
-        [sg.Button('Open', size=(12,1), key='moveOpenBtn'), sg.Input('10', size=(12,1), justification='center', disabled_readonly_background_color=TheiaDarkGrayColor, key='irisStepFld'), 
-            sg.Button('Close', size=(12,1), key='moveCloseBtn')],
-        ]
-    curPosFrame = [
-        [sg.Input('0', size=(12,1), pad=(6,6), justification='center', disabled_readonly_background_color=TheiaDarkGrayColor, key='zoomCurFld')],
-        [sg.Input('0', size=(12,1), pad=(6,6), justification='center', disabled_readonly_background_color=TheiaDarkGrayColor, key='focusCurFld')],
-        [sg.Input('0', size=(12,1), pad=(6,6), justification='center', disabled_readonly_background_color=TheiaDarkGrayColor, key='irisCurFld')],
-        ]
-    absMoveFrame = [
-        [sg.Button('Zoom', size=(12,1), key='moveZoomAbsBtn', disabled=True)],
-        [sg.Button('Focus', size=(12,1), key='moveFocusAbsBtn', disabled=True)],
-        [sg.Button('Iris', size=(12,1), key='moveIrisAbsBtn', disabled=True)],
-        ]
-    IRCFrame = [
-        [sg.Text('Internal filter:', size=(12,1)), sg.Button('Filter 1\n(Visible)', size=(11,2), key='IRCBtn1'), sg.Button('Filter 2\n(Visible + IR)', size=(11,2), key='IRCBtn2')]
-        ]
-    
-    # lens IQ frames
-    lensIQFileFrame = [
-        [sg.Checkbox('Lens IQ or calibrated lens was purchased from Theia and data file was downloaded.', key='lensIQCheckbox', default=False, enable_events=True)],
-        [sg.pin(sg.Text('Data file:', key='calFileText', visible=False)),
-            sg.pin(sg.Input('Select...', key='calFile', disabled=True, size=(30,1), visible=False)),
-            sg.pin(sg.Input('', key='calFileFull', visible=False, enable_events=True)),
-            sg.pin(sg.FileBrowse('Browse', file_types=([('*.json', '*.json')]), key='calFileBrowse', target='calFileFull', visible=False))]
-        ]
-    lensIQLayoutFrame = lensIQGUILayout()
-    lensIQFrame = [
-        [sg.Column(lensIQFileFrame, expand_x=True)],
-        [sg.pin(sg.Column(lensIQLayoutFrame, expand_x=True, visible=False, key='lensIQControlFrame'))]
-    ]
-                
-    # overall layout
-    layout = [
-        [sg.Column([[sg.Image(data=resources.asset_bytes('theia_logo.png')), sg.Column(headerFrame)]], expand_x=True)],
-        [sg.Frame('Lens IQ™', lensIQFrame, expand_x=True)],
-        [sg.Frame('Relative move', relMoveFrame), sg.Frame('Current', curPosFrame), sg.Frame('Absolute move', absMoveFrame)],
-        [sg.Column(IRCFrame)],
-        [sg.Frame('', footerFrame, expand_x=True)]
-    ]
-    return layout
+def lens_iq_layout() -> Layout:
+    """Lens IQ engineering-unit panel; its string keys are the contract of the expansion pack."""
 
-# display revision
-def setRevisionField(window, rev:str=''):
-    if not window:
-        return
-    window['fldRevision'].update(f'v. {rev}')
+    def sensor_field(label: str, key: str) -> sg.Column:
+        return sg.Column(
+            [
+                [sg.Text(label, justification="center")],
+                [
+                    sg.Input(
+                        "",
+                        key=key,
+                        size=(7, 1),
+                        enable_events=True,
+                        disabled=True,
+                        disabled_readonly_background_color=DARK_GRAY,
+                    )
+                ],
+            ]
+        )
 
-# Lens IQ GUI layout
-def lensIQGUILayout():
-    '''
-    Layout for Lens IQ fields.  
-    ### return: 
-    [lensIQ Frame layout]
-    '''
-    # top layout for setup functions
-    sensorLayout = [
-        [sg.Column([
-            [sg.Text('Width [mm]', justification='center')], 
-            [sg.Input('', key='sensorWd', size=(7,1), enable_events=True, disabled=True, disabled_readonly_background_color=TheiaDarkGrayColor)]
-            ]),
-        sg.Column([
-            [sg.Text('Diagonal [mm]', justification='center')],
-            [sg.Input('', size=(7,1), key='sensorDiag', enable_events=True, disabled=True, disabled_readonly_background_color=TheiaDarkGrayColor)]
-            ]),
-        sg.Column([
-            [sg.Text('W/Diag ratio', justification='center')],
-            [sg.Input('', size=(7,1), key='sensorRatio', enable_events=True, disabled=True, disabled_readonly_background_color=TheiaDarkGrayColor)]
-            ]),
-        sg.Button('Reset', key='resetBtn'),
+    sensor = [
+        [
+            sensor_field("Width [mm]", "sensorWd"),
+            sensor_field("Diagonal [mm]", "sensorDiag"),
+            sensor_field("W/Diag ratio", "sensorRatio"),
+            sg.Button("Reset", key="resetBtn"),
         ]
     ]
-    topLayout = [
-        [sg.Column([
-            [sg.Frame('Image sensor', sensorLayout)],
-            [sg.Text('', expand_x=True, text_color='red', font=('Calibri', 8), visible=False, key='sensorWarning')]
-            ]),
-        sg.Column([
-            [sg.Text('Units'), sg.Combo([], enable_events=True, key='unitList', size=(10,1))],
-            [sg.Button('BFL calibration', size=(15,1), key='btnBFL', disabled=True)],
-            [sg.Text('', font=('Calibri 9'), key='fldCurBFL')]
-            ])
+    top = [
+        [
+            sg.Column(
+                [
+                    [sg.Frame("Image sensor", sensor)],
+                    [
+                        sg.Text(
+                            "",
+                            expand_x=True,
+                            text_color="red",
+                            font=FONT_SMALL,
+                            visible=False,
+                            key="sensorWarning",
+                        )
+                    ],
+                ]
+            ),
+            sg.Column(
+                [
+                    [
+                        sg.Text("Units"),
+                        sg.Combo([], enable_events=True, key="unitList", size=(10, 1)),
+                    ],
+                    [
+                        sg.Button(
+                            "BFL calibration", size=(15, 1), key="btnBFL", disabled=True
+                        )
+                    ],
+                    [sg.Text("", font=("Helvetica", 9), key="fldCurBFL")],
+                ]
+            ),
         ]
     ]
-    # bottom layout for interaction
-    col1Wd = 15
-    colParam = [
-        [sg.Text('Parameter', size=(col1Wd,1), justification='right', font=('Calibri 12 underline'))],
-        [sg.Text('Object distance', size=(col1Wd,1), justification="right")],
-        [sg.Text('Angle of view', size=(col1Wd,1), justification="right")],
-        [sg.Text('Field of view', size=(col1Wd,1), justification="right")],
-        [sg.Text('Focal length', size=(col1Wd,1), justification="right")],
-        [sg.Text('F/#', size=(col1Wd,1), justification="right")],
-        [sg.Text('Numeric aperture', size=(col1Wd,1), justification="right")],
-        [sg.Text('Depth of field', size=(col1Wd,1), justification="right")],
+    parameters = [
+        "Object distance",
+        "Angle of view",
+        "Field of view",
+        "Focal length",
+        "F/#",
+        "Numeric aperture",
+        "Depth of field",
     ]
-    col2Wd = 10
-    colValue = [
-        [sg.Text('Value', size=(col2Wd,1), justification='center', font=('Calibri 12 underline'))],
-        [sg.Input('', size=(col2Wd,1), key='ODValue')],
-        [sg.Input('', size=(col2Wd,1), key='AOVValue')],
-        [sg.Input('', size=(col2Wd,1), key='FOVValue')],
-        [sg.Input('', size=(col2Wd,1), key='FLValue')],
-        [sg.Input('', size=(col2Wd,1), key='FNumValue')],
-        [sg.Input('', size=(col2Wd,1), key='NAValue')],
-        [sg.Input('', size=(col2Wd,1), key='DOFValue', disabled=True)],
+    prefixes = ["OD", "AOV", "FOV", "FL", "FNum", "NA", "DOF"]
+    units = ["m", "deg", "m", "mm", "", "", "m"]
+    col_param = [
+        [sg.Text("Parameter", size=(15, 1), justification="right", font=FONT_HEADER)]
     ]
-    col3Wd = 3
-    colUnit = [
-        [sg.Text('')],
-        [sg.Text('m', size=(col3Wd,1), key='ODUnits')],
-        [sg.Text('deg', size=(col3Wd,1), key='AOVUnits')],
-        [sg.Text('m', size=(col3Wd,1), key='FOVUnits')],
-        [sg.Text('mm', size=(col3Wd,1), key='FLUnits')],
-        [sg.Text('', size=(col3Wd,1), key='FNumUnits')],
-        [sg.Text('', size=(col3Wd,1), key='NAUnits')],
-        [sg.Text('m', size=(col3Wd,1), key='DOFUnits')],
+    col_param += [
+        [sg.Text(name, size=(15, 1), justification="right")] for name in parameters
     ]
-    col4Wd = 10
-    colMin = [
-        [sg.Text('Minimum', size=(col4Wd,1), justification='center', font=('Calibri 12 underline'))],
-        [sg.Input('', size=(col4Wd,1), key='ODMin', disabled=True)],
-        [sg.Input('', size=(col4Wd,1), key='AOVMin', disabled=True)],
-        [sg.Input('', size=(col4Wd,1), key='FOVMin', disabled=True)],
-        [sg.Input('', size=(col4Wd,1), key='FLMin', disabled=True)],
-        [sg.Input('', size=(col4Wd,1), key='FNumMin', disabled=True)],
-        [sg.Input('', size=(col4Wd,1), key='NAMin', disabled=True)],
-        [sg.Input('', size=(col4Wd,1), key='DOFMin', disabled=True)],
+    col_value: Layout = [
+        [sg.Text("Value", size=(10, 1), justification="center", font=FONT_HEADER)]
     ]
-    colMax = [
-        [sg.Text('Maximum', size=(col4Wd,1), justification='center', font=('Calibri 12 underline'))],
-        [sg.Input('', size=(col4Wd,1), key='ODMax', disabled=True)],
-        [sg.Input('', size=(col4Wd,1), key='AOVMax', disabled=True)],
-        [sg.Input('', size=(col4Wd,1), key='FOVMax', disabled=True)],
-        [sg.Input('', size=(col4Wd,1), key='FLMax', disabled=True)],
-        [sg.Input('', size=(col4Wd,1), key='FNumMax', disabled=True)],
-        [sg.Input('', size=(col4Wd,1), key='NAMax', disabled=True)],
-        [sg.Input('', size=(col4Wd,1), key='DOFMax', disabled=True)],
+    col_value += [
+        [sg.Input("", size=(10, 1), key=f"{p}Value", disabled=(p == "DOF"))]
+        for p in prefixes
     ]
-    topLineLayout = [
-        [sg.Text('', key='controlTextFld')]
+    col_unit: Layout = [[sg.Text("")]] + [
+        [sg.Text(u, size=(3, 1), key=f"{p}Units")]
+        for p, u in zip(prefixes, units, strict=True)
     ]
-    bottomLayout = [
-        [sg.Column(topLineLayout)],
-        [sg.Column(colParam), sg.Column(colValue), sg.Column(colUnit), sg.Column(colMin), sg.Column(colMax)]
+    col_min: Layout = [
+        [sg.Text("Minimum", size=(10, 1), justification="center", font=FONT_HEADER)]
     ]
-    layout = [
-        #[sg.Frame('Setup', layout=topLayout, expand_x=True)],
-        [sg.Column(topLayout, expand_x=True)],
-        [sg.Frame('Control', layout=bottomLayout, expand_x=True)]
+    col_min += [
+        [sg.Input("", size=(10, 1), key=f"{p}Min", disabled=True)] for p in prefixes
+    ]
+    col_max: Layout = [
+        [sg.Text("Maximum", size=(10, 1), justification="center", font=FONT_HEADER)]
+    ]
+    col_max += [
+        [sg.Input("", size=(10, 1), key=f"{p}Max", disabled=True)] for p in prefixes
+    ]
+    bottom = [
+        [sg.Column([[sg.Text("", key="controlTextFld")]])],
+        [
+            sg.Column(col_param),
+            sg.Column(col_value),
+            sg.Column(col_unit),
+            sg.Column(col_min),
+            sg.Column(col_max),
+        ],
+    ]
+    return [
+        [sg.Column(top, expand_x=True)],
+        [sg.Frame("Control", layout=bottom, expand_x=True)],
     ]
 
-    return layout
 
-# BFL calibration window layout
-def bflLayout():
-    '''
-    Create the BFL calibration window layout (experimental design).
-    ### return:  
-    [BFL window layout]
-    '''
-    # OD calibration row
-    odLayout = [
-        [sg.Text("BFL calibration at OD"), 
-         sg.Input('', size=(10,1), key='fldODCal'), 
-         sg.Text('', size=(4,1), key='fldODSymbol'),
-         sg.Button("Set OD", key='setODBtn', size=(16,1))]
-    ]
-    
-    # FL selection row
-    flLayout = [
-        [sg.Text("1. Select FL"), 
-         sg.Button('', key='preset0', size=(6,1)), 
-         sg.Button('', key='preset1', size=(6,1)), 
-         sg.Button('', key='preset2', size=(6,1)), 
-         sg.Button('', key='preset3', size=(6,1)), 
-         sg.Button('', key='preset4', size=(6,1)), 
-         sg.Text('Other'), 
-         sg.Input('', size=(6,1), key='fl_other'), 
-         sg.Text('mm')]
-    ]
-    
-    # Focus control row
-    focusLayout = [
-        [sg.Text('2. Find best focus'), 
-         sg.Button('near', key='focusNear', size=(10,1)), 
-         sg.Input('100', size=(10,1), key='focusSteps'), 
-         sg.Text('steps'),
-         sg.Button('far', key='focusFar', size=(10,1))]
-    ]
-
-    # save row
-    saveLayout = [
-         [sg.Text('3. Save BFL data point'), sg.Button('Save', key='saveBtn', size=(16,1))]
-    ]
-    
-    # Graph
-    graphLayout = [
-        [sg.Graph(canvas_size=(400, 200), 
-                  graph_bottom_left=(0,0), 
-                  graph_top_right=(10,10),
-                  background_color='white', 
-                  key='BFLGraph', 
-                  float_values=True, 
-                  enable_events=True)]
-    ]
-
-    # color key
-    keyLayout = [
-        [sg.Graph(canvas_size=(400, 50), graph_bottom_left=(0,0), graph_top_right=(400,50),
-            background_color='white', key='BFLKey', border_width=2)]
-    ]
-    # Control buttons
-    controlLayout = [
-        [sg.Button('Copy BFL curve\ncoefficients (P0,P1,P2)', key='BFLCopy', size=(20,2)),
-         sg.Button('Delete selected\ndata point', key='btnDelBFL', disabled=True, size=(16,2)), 
-         sg.Button('Clear all\ndata points', key='btnResetBFL', disabled=True, size=(16,2))
+def bfl_layout() -> Layout:
+    """BFL calibration window; its string keys are the contract of the expansion pack."""
+    od_row = [
+        [
+            sg.Text("BFL calibration at OD"),
+            sg.Input("", size=(10, 1), key="fldODCal"),
+            sg.Text("", size=(4, 1), key="fldODSymbol"),
+            sg.Button("Set OD", key="setODBtn", size=(16, 1)),
         ]
     ]
-    
-    # Close button
-    bottomLayout = [
-        [sg.Button('BFL complete', key='exitBtn', size=(12,1))]
+    fl_row = [
+        [
+            sg.Text("1. Select FL"),
+            *[sg.Button("", key=f"preset{i}", size=(6, 1)) for i in range(5)],
+            sg.Text("Other"),
+            sg.Input("", size=(6, 1), key="fl_other"),
+            sg.Text("mm"),
+        ]
+    ]
+    focus_row = [
+        [
+            sg.Text("2. Find best focus"),
+            sg.Button("near", key="focusNear", size=(10, 1)),
+            sg.Input("100", size=(10, 1), key="focusSteps"),
+            sg.Text("steps"),
+            sg.Button("far", key="focusFar", size=(10, 1)),
+        ]
+    ]
+    save_row = [
+        [
+            sg.Text("3. Save BFL data point"),
+            sg.Button("Save", key="saveBtn", size=(16, 1)),
+        ]
+    ]
+    graph = [
+        [
+            sg.Graph(
+                canvas_size=(400, 200),
+                graph_bottom_left=(0, 0),
+                graph_top_right=(10, 10),
+                background_color="white",
+                key="BFLGraph",
+                float_values=True,
+                enable_events=True,
+            )
+        ]
+    ]
+    color_key = [
+        [
+            sg.Graph(
+                canvas_size=(400, 50),
+                graph_bottom_left=(0, 0),
+                graph_top_right=(400, 50),
+                background_color="white",
+                key="BFLKey",
+                border_width=2,
+            )
+        ]
+    ]
+    controls = [
+        [
+            sg.Button(
+                "Copy BFL curve\ncoefficients (P0,P1,P2)", key="BFLCopy", size=(20, 2)
+            ),
+            sg.Button(
+                "Delete selected\ndata point",
+                key="btnDelBFL",
+                disabled=True,
+                size=(16, 2),
+            ),
+            sg.Button(
+                "Clear all\ndata points", key="btnResetBFL", disabled=True, size=(16, 2)
+            ),
+        ]
+    ]
+    return [
+        [sg.Column(od_row, expand_x=True)],
+        [sg.Column(fl_row, expand_x=True)],
+        [sg.Column(focus_row, expand_x=True)],
+        [sg.Column(save_row, expand_x=True)],
+        [sg.Column(graph, element_justification="center")],
+        [sg.Column(color_key, expand_x=True)],
+        [sg.Column(controls, expand_x=True, element_justification="center")],
+        [
+            sg.Column(
+                [[sg.Button("BFL complete", key="exitBtn", size=(12, 1))]],
+                expand_x=True,
+                element_justification="center",
+            )
+        ],
     ]
 
-    # Overall layout
-    layout = [
-        [sg.Column(odLayout, expand_x=True)],
-        [sg.Column(flLayout, expand_x=True)],
-        [sg.Column(focusLayout, expand_x=True)],
-        [sg.Column(saveLayout, expand_x=True)],
-        [sg.Column(graphLayout, element_justification='center')],
-        [sg.Column(keyLayout, expand_x=True)],
-        [sg.Column(controlLayout, expand_x=True, element_justification='center')],
-        [sg.Column(bottomLayout, expand_x=True, element_justification='center')]
-    ]
 
-    return layout
-
-# setting window 
-def settingsGUI(initialProtocol:str, MCR, GUIActions, position:tuple[int, int]) -> dict | None:
-    '''
-    Create a window for additional settings.  This function handles the window and returns the values once it is closed.  
-    This window includes communication path and motor speeds.  
-    Once set by the user, the motor speeds are written to the board and the communication path is updated.  
-    If the user cancels, nothing is changed and the return value is 'None'.  
-    ### input:
-    - initialProtocol: current communication path string ('USB', 'UART', 'I2C')
-    - MCR: the handle to the MCR module
-    - GUIActions: the handle to the GUI actions module
-    - position: the (x (center), y (top)) position to place the window
-    ### return: 
-    [settings values | None]
-    '''
-    # check if MCR is initialized
-    if not MCR:
-        sg.popup_ok('Motor control must be initialized first', title='Error')
+def settings_window(
+    initial_protocol: str, mcr: Any | None, actions: Any, position: tuple[int, int]
+) -> dict[str, Any] | None:
+    """Modal settings window; returns the entered values on Save, None on cancel or when not connected."""
+    if mcr is None:
+        sg.popup_ok("Motor control must be initialized first", title="Error")
         return None
 
-    # motor speeds
-    speedsLayout = [
-        [sg.Text('', size=(16,1)), sg.Text('Moving', size=(7,1)), sg.Text('Homing', size=(7,1))],
-        [sg.Text('Focus motor speed', size=(16,1)), sg.Input('', size=(7,1), key='focusSpeed', disabled=True), sg.Input('', size=(7,1), key='focusHomeSpeed', disabled=True)],
-        [sg.Text('Zoom motor speed', size=(16,1)), sg.Input('', size=(7,1), key='zoomSpeed', disabled=True), sg.Input('', size=(7,1), key='zoomHomeSpeed', disabled=True)],
-        [sg.Text('Iris motor speed', size=(16,1)), sg.Input('', size=(7,1), key='irisSpeed', disabled=True), sg.Input('', size=(7,1), key='irisHomeSpeed', disabled=True)],
+    def speed_row(label: str, move_key: str, home_key: str) -> list[Any]:
+        return [
+            sg.Text(label, size=(16, 1)),
+            sg.Input("", size=(7, 1), key=move_key, disabled=True),
+            sg.Input("", size=(7, 1), key=home_key, disabled=True),
+        ]
+
+    speeds = [
+        [
+            sg.Text("", size=(16, 1)),
+            sg.Text("Moving", size=(7, 1)),
+            sg.Text("Homing", size=(7, 1)),
+        ],
+        speed_row(
+            "Focus motor speed", SettingsKey.FOCUS_SPEED, SettingsKey.FOCUS_HOME_SPEED
+        ),
+        speed_row(
+            "Zoom motor speed", SettingsKey.ZOOM_SPEED, SettingsKey.ZOOM_HOME_SPEED
+        ),
+        speed_row(
+            "Iris motor speed", SettingsKey.IRIS_SPEED, SettingsKey.IRIS_HOME_SPEED
+        ),
     ]
-    # communication path
-    comLayout = [
-        [sg.Text('Warning: Changing the communication path will reboot the controller board and the original communication path will no longer be active', 
-                    size=(30,4), text_color='red')],
-        [sg.Button('Change com path', key='changePath')],
-        [sg.Radio('USB', group_id='comGroup', default=(initialProtocol == 'USB'), key='comUSB', visible=False), 
-            sg.Radio('UART', group_id='comGroup', default=(initialProtocol == 'UART'), key='comUART', visible=False), 
-            sg.Radio('I2C', group_id='comGroup', default=(initialProtocol == 'I2C'), key='comI2C', visible=False)]
+    communication = [
+        [
+            sg.Text(
+                "Warning: Changing the communication path will reboot the controller board and the original communication path will no longer be active",
+                size=(30, 4),
+                text_color="red",
+            )
+        ],
+        [sg.Button("Change com path", key=SettingsKey.CHANGE_PATH)],
+        [
+            sg.Radio(
+                "USB",
+                group_id="comGroup",
+                default=(initial_protocol == "USB"),
+                key=SettingsKey.COM_USB,
+                visible=False,
+            ),
+            sg.Radio(
+                "UART",
+                group_id="comGroup",
+                default=(initial_protocol == "UART"),
+                key=SettingsKey.COM_UART,
+                visible=False,
+            ),
+            sg.Radio(
+                "I2C",
+                group_id="comGroup",
+                default=(initial_protocol == "I2C"),
+                key=SettingsKey.COM_I2C,
+                visible=False,
+            ),
+        ],
     ]
-    # additional settings
-    addLayout = [
-        [sg.Checkbox('Backlash', default=True, key='cp_backlash')],
-        [sg.Checkbox('Regard limits', default=True, key='cp_limitCheck')]
+    extra = [
+        [sg.Checkbox("Backlash", default=True, key=SettingsKey.BACKLASH)],
+        [sg.Checkbox("Regard limits", default=True, key=SettingsKey.LIMIT_CHECK)],
     ]
     layout = [
-        [sg.Frame('Motor speeds', speedsLayout, expand_x=True)], 
-        [sg.Frame('Additional settings', addLayout)],
-        [sg.Frame('Communication', comLayout)],
-        [sg.Button('Save settings', key='save'), sg.Button('Cancel', key='discard')]
+        [sg.Frame("Motor speeds", speeds, expand_x=True)],
+        [sg.Frame("Additional settings", extra)],
+        [sg.Frame("Communication", communication)],
+        [
+            sg.Button("Save settings", key=SettingsKey.SAVE),
+            sg.Button("Cancel", key=SettingsKey.DISCARD),
+        ],
     ]
+    window = sg.Window("Set values", layout, modal=True, finalize=True)
+    center_window(window, position, 50)
 
-    window = sg.Window('Set values', layout, modal=True, finalize=True)
-    centerWindowPosition(window, position, 50)
-
-    if MCR.MCRInitialized:
-        window['focusSpeed'].update(MCR.focus.currentSpeed)
-        window['focusSpeed'].update(disabled=False)
-        window['focusHomeSpeed'].update(MCR.focus.homingSpeed)
-        window['focusHomeSpeed'].update(disabled=False)
-        window['zoomSpeed'].update(MCR.zoom.currentSpeed)
-        window['zoomSpeed'].update(disabled=False)
-        window['zoomHomeSpeed'].update(MCR.zoom.homingSpeed)
-        window['zoomHomeSpeed'].update(disabled=False)
-        window['irisSpeed'].update(MCR.iris.currentSpeed)
-        window['irisSpeed'].update(disabled=False)
-        window['irisHomeSpeed'].update(MCR.iris.homingSpeed)
-        window['irisHomeSpeed'].update(disabled=False)
-        window['cp_backlash'].update(GUIActions.regardBacklash)
-        window['cp_limitCheck'].update(GUIActions.regardLimits)
+    for motor, move_key, home_key in (
+        ("focus", SettingsKey.FOCUS_SPEED, SettingsKey.FOCUS_HOME_SPEED),
+        ("zoom", SettingsKey.ZOOM_SPEED, SettingsKey.ZOOM_HOME_SPEED),
+        ("iris", SettingsKey.IRIS_SPEED, SettingsKey.IRIS_HOME_SPEED),
+    ):
+        motor_obj = getattr(mcr, motor)
+        window[move_key].update(motor_obj.currentSpeed, disabled=False)
+        window[home_key].update(motor_obj.homingSpeed, disabled=False)
+    window[SettingsKey.BACKLASH].update(actions.regard_backlash)
+    window[SettingsKey.LIMIT_CHECK].update(actions.regard_limits)
 
     while True:
-        event, values = window.read() # type: ignore
-        if event in {sg.WIN_CLOSED, 'save', 'discard'}:
+        event, values = window.read()
+        if event in {sg.WIN_CLOSED, SettingsKey.SAVE, SettingsKey.DISCARD}:
             break
-        elif event == 'changePath':
-            window['changePath'].update(visible=False)
-            window['comUSB'].update(visible=True)
-            window['comUART'].update(visible=True)
-            window['comI2C'].update(visible=True)
+        if event == SettingsKey.CHANGE_PATH:
+            window[SettingsKey.CHANGE_PATH].update(visible=False)
+            for key in (SettingsKey.COM_USB, SettingsKey.COM_UART, SettingsKey.COM_I2C):
+                window[key].update(visible=True)
     window.close()
-    if event == 'save': 
-        return values
-    return None
+    return values if event == SettingsKey.SAVE else None
 
-# help popup window
-def helpPopup(position:tuple[int, int]):
-    '''
-    Open the help popup window with resources and links.
-    ### input: 
-    - position: the (x (center), y (top)) position to place the window
-    '''
-    helpLinks = help.help_init()
-    if not helpLinks:
-        sg.popup_ok('No help links available', title='Error')
+
+def help_popup(position: tuple[int, int]) -> None:
+    """Modal window listing the help links; clicking one opens it in the browser."""
+    links = help_links.help_init()
+    if not links:
+        sg.popup_ok("No help links available", title="Error")
         return
-    layout = []
-    for n, link in enumerate(helpLinks):
-        layout.append([sg.Text(link['desc'], key=f'LINK{n}', enable_events=True)])
-    layout.append([sg.Button('Close', size=(10,1))])
-
-    window = sg.Window('Help resources and links', layout, finalize=True, modal=True)
-    centerWindowPosition(window, position, 50)
-    for n in range(len(helpLinks)):
-        help.hyperlink(window=window, fieldKey=f'LINK{n}')
-
+    layout: Layout = [
+        [sg.Text(link["desc"], key=f"LINK{n}", enable_events=True)]
+        for n, link in enumerate(links)
+    ]
+    layout.append([sg.Button("Close", size=(10, 1))])
+    window = sg.Window("Help resources and links", layout, finalize=True, modal=True)
+    center_window(window, position, 50)
+    for n in range(len(links)):
+        help_links.hyperlink(window, f"LINK{n}")
     while True:
-        event, values = window.read() # type: ignore
-        if event in {sg.WIN_CLOSED, 'Close'}:
+        event, _ = window.read()
+        if event in {sg.WIN_CLOSED, "Close"}:
             break
-    
-        elif event.startswith('LINK'):
-            index = int(event.replace('LINK', ''))
-            URL = helpLinks[index]['URL']
-            if URL:
-                web.open(URL)
+        if isinstance(event, str) and event.startswith("LINK"):
+            url = links[int(event.removeprefix("LINK"))]["URL"]
+            if url:
+                webbrowser.open(url)
     window.close()
 
-# get the main window size and position
-def windowPosition(mainGUIWindow) -> tuple:
-    '''
-    Get the main window x center and y top positions. 
-    ### input: 
-    - mainGUIWindow: the handle to the main GUI window
-    ### return: 
-    [
-    (x,y)          # window (x center, y top) position
-    ]
-    '''
+
+def window_position(window: Any) -> tuple[int, int]:
+    """(x center, y top) of `window`, or (0, 0) when Tk cannot report it."""
     try:
-        x, y = mainGUIWindow.CurrentLocation()
-        width, height = mainGUIWindow.Size
-    except Exception as e:
-        log.error(f'Error getting main window position and size: {e}')
-        return (0,0)
-    xCenter = x + int(width/2)
-    yTop = y
-    return (xCenter, yTop)
-    
-# move the window
-def centerWindowPosition(window, parentPosition:tuple[int, int], yShift:int):
-    '''
-    Move the window to the center (x) of the main window.  
-    ### input:
-    - window: the window handle for the window to move
-    - parentPosition: the (x (center), y (top)) position of the main window
-    - yShift: the pixels to shift below the top of the main window.  
-    '''
-    size = window.size
-    x, y = parentPosition
-    if x == 0:
-        x = 400
-    if y == 0:
-        y = 200
-    window.move(x - int(size[0]/2), y + yShift)
+        x, y = window.CurrentLocation()
+        width, _ = window.Size
+    except Exception:
+        log.exception("Error getting main window position and size")
+        return (0, 0)
+    return (x + width // 2, y)
+
+
+def center_window(window: Any, parent_position: tuple[int, int], y_shift: int) -> None:
+    """Move `window` so it is centered under the parent's top edge, `y_shift` pixels down."""
+    width, _ = window.size
+    x, y = parent_position
+    window.move((x or 400) - width // 2, (y or 200) + y_shift)
