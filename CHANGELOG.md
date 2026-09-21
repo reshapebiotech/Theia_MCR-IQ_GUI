@@ -11,6 +11,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `uv` project management with `pyproject.toml`, `uv.lock` and a pinned Python 3.13.
 - Shared `MCRSession` controller used by both the GUI and the CLI, with classified errors.
 - Test suite with a fake controller, and a CI workflow for Linux, macOS and Windows.
+- `justfile` task runner recipes and pre-commit hooks (ruff and ty on commit, pytest on push).
 
 ### Changed
 

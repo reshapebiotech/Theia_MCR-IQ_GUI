@@ -25,7 +25,7 @@ theia-mcr = "theia_mcr_iq.cli:main"
 Upstream = "https://github.com/cliquot22/Theia_MCR-IQ_GUI"
 
 [dependency-groups]
-dev = ["pytest>=8", "ruff>=0.8", "ty"]
+dev = ["pre-commit>=4", "pytest>=8", "ruff>=0.8", "ty"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/theia_mcr_iq"]
