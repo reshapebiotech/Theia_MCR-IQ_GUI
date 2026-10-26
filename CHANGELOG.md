@@ -3,6 +3,18 @@
 All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [4.1.0] - 2026-10-26
+
+### Added
+
+- `--port-check-timeout` sets how long the serial port may take to open before it is reported as unresponsive.
+- `THEIA_MCR_TIMEOUT` and `THEIA_MCR_PORT_CHECK_TIMEOUT` set the connect and port-check timeouts for the CLI and the GUI. The `docker/theia-mcr` wrapper passes both into the container.
+
+### Changed
+
+- The port-check timeout is 10 seconds instead of a fixed 2 seconds, and the connect timeout default is 15 seconds instead of 5. Some FT200X boards take about 5 seconds to open, which the old limits reported as "unresponsive".
+- An invalid timeout value exits with the usage error code 2.
+
 ## [4.0.0] - 2026-09-21
 
 ### Added

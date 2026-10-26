@@ -10,10 +10,12 @@
 #   THEIA_MCR_DATA_DIR    host folder mounted at /data for limits.json and GUI-saved settings
 #   THEIA_MCR_PORT        serial device inside the container, same path as on the host
 #   THEIA_MCR_LENS        lens key, see `theia-mcr lenses`
+#   THEIA_MCR_TIMEOUT     connect timeout in seconds, like --timeout
+#   THEIA_MCR_PORT_CHECK_TIMEOUT  seconds the port may take to open, like --port-check-timeout
 #   THEIA_MCR_PRIVILEGED  set to 1 when the cgroup device rules do not work (rootless Docker)
 set -eu
 
-IMAGE="${THEIA_MCR_IMAGE:-ghcr.io/reshapebiotech/theia-mcr-iq:4.0.0}"  # bump with each release
+IMAGE="${THEIA_MCR_IMAGE:-ghcr.io/reshapebiotech/theia-mcr-iq:4.1.0}"  # bump with each release
 DATA="${THEIA_MCR_DATA_DIR:-$HOME/.theia-mcr}"
 
 mkdir -p "$DATA"  # create it as the user, otherwise Docker creates it root-owned
@@ -35,4 +37,5 @@ exec docker run --rm -i $TTY --network none \
     -v /dev:/dev \
     -v "$DATA:/data" \
     -e THEIA_MCR_PORT -e THEIA_MCR_LENS \
+    -e THEIA_MCR_TIMEOUT -e THEIA_MCR_PORT_CHECK_TIMEOUT \
     "$@"

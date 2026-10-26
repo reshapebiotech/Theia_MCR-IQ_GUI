@@ -12,7 +12,16 @@ from collections.abc import Callable, Sequence
 from typing import Any, Literal
 
 from theia_mcr_iq import __version__, lens_data, ports, resources
-from theia_mcr_iq.controller import ALL_MOTORS, MCRError, MCRSession, Motor, MotorSpeeds
+from theia_mcr_iq.controller import (
+    ALL_MOTORS,
+    DEFAULT_CONNECT_TIMEOUT,
+    ENV_TIMEOUT,
+    MCRError,
+    MCRSession,
+    Motor,
+    MotorSpeeds,
+    parse_seconds,
+)
 from theia_mcr_iq.lens_data import LensNotFoundError, LensVariant
 from theia_mcr_iq.settings import Settings
 
@@ -35,7 +44,7 @@ DIRECTIONS: dict[Motor, dict[str, int]] = {
 }
 
 PortLister = Callable[[], list[ports.PortInfo]]
-PortChecker = Callable[[str], tuple[ports.PortCheck, str]]
+PortChecker = Callable[[str, float], tuple[ports.PortCheck, str]]
 
 
 class CliError(Exception):
@@ -95,6 +104,7 @@ class Context:
         port = self.resolve_port()
         kwargs: dict[str, Any] = {
             "timeout": self.args.timeout,
+            "port_check_timeout": self.args.port_check_timeout,
             "debug": self.args.debug,
         }
         if self.mcr_factory is not None:
@@ -186,6 +196,14 @@ def _common_parent() -> argparse.ArgumentParser:
     return parent
 
 
+def _seconds(text: str) -> float:
+    """Argparse type for a positive number of seconds."""
+    try:
+        return parse_seconds(text)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from None
+
+
 def _add_common(parser: argparse.ArgumentParser, *, suppress: bool) -> None:
     """Add the options shared by every command."""
     d = argparse.SUPPRESS if suppress else None
@@ -202,9 +220,18 @@ def _add_common(parser: argparse.ArgumentParser, *, suppress: bool) -> None:
     )
     group.add_argument(
         "--timeout",
-        type=float,
-        default=argparse.SUPPRESS if suppress else 5.0,
-        help="connect timeout in seconds",
+        type=_seconds,
+        default=d,
+        help=f"connect timeout in seconds (default: ${ENV_TIMEOUT} or {DEFAULT_CONNECT_TIMEOUT:g})",
+    )
+    group.add_argument(
+        "--port-check-timeout",
+        type=_seconds,
+        default=d,
+        help=(
+            "seconds the serial port may take to open before it counts as unresponsive "
+            f"(default: ${ports.ENV_PORT_CHECK_TIMEOUT} or {ports.DEFAULT_PORT_CHECK_TIMEOUT:g})"
+        ),
     )
     motion = parser.add_argument_group("motion")
     motion.add_argument(
@@ -453,6 +480,8 @@ def main(
     except MCRError as exc:
         detail = f" ({exc.detail})" if exc.detail else ""
         print(f"error: {exc.message}{detail}", file=sys.stderr)
+        if exc.kind == "config":
+            return EXIT_USAGE
         return EXIT_MOVE if exc.kind == "move" else EXIT_DEVICE
 
 

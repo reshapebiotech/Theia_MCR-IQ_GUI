@@ -7,13 +7,20 @@ from typing import Any, ClassVar
 
 import pytest
 
-from theia_mcr_iq import lens_data, resources
-from theia_mcr_iq.controller import MCRError, MCRSession, MotorSpeeds
+from theia_mcr_iq import lens_data, ports, resources
+from theia_mcr_iq.controller import (
+    DEFAULT_CONNECT_TIMEOUT,
+    ENV_TIMEOUT,
+    MCRError,
+    MCRSession,
+    MotorSpeeds,
+    resolve_timeout,
+)
 from theia_mcr_iq.ports import PortCheck
 
 from .conftest import FakeMCR
 
-OK_CHECK = staticmethod(lambda port: (PortCheck.OK, ""))
+OK_CHECK = staticmethod(lambda port, t: (PortCheck.OK, ""))
 
 
 def lens(key: str = "TL1250_N6") -> lens_data.LensVariant:
@@ -22,7 +29,10 @@ def lens(key: str = "TL1250_N6") -> lens_data.LensVariant:
 
 def connect(factory: Callable[..., Any], **kwargs: Any) -> MCRSession:
     return MCRSession.connect(
-        "COM1", mcr_factory=factory, port_checker=lambda p: (PortCheck.OK, ""), **kwargs
+        "COM1",
+        mcr_factory=factory,
+        port_checker=lambda p, t: (PortCheck.OK, ""),
+        **kwargs,
     )
 
 
@@ -53,7 +63,7 @@ def test_precheck_failures_map_to_kinds(
             MCRSession.connect(
                 "COM1",
                 mcr_factory=fake_mcr_factory,
-                port_checker=lambda p, c=check: (c, "msg"),
+                port_checker=lambda p, t, c=check: (c, "msg"),
             )
         assert info.value.kind == kind
     assert FakeMCR.instances == []
@@ -96,6 +106,69 @@ def test_constructor_timeout() -> None:
         connect(factory, timeout=0.2)
     assert info.value.kind == "timeout"
     release.set()
+
+
+def test_constructor_timeout_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    import threading
+
+    release = threading.Event()
+
+    def factory(port: str, **kwargs: Any) -> Any:
+        release.wait(5)
+        return object()
+
+    monkeypatch.setenv(ENV_TIMEOUT, "0.2")
+    with pytest.raises(MCRError) as info:
+        connect(factory)
+    assert info.value.kind == "timeout"
+    release.set()
+
+
+def test_port_check_timeout_explicit_env_default(
+    fake_mcr_factory: Callable[..., FakeMCR], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: list[float] = []
+
+    def checker(port: str, timeout: float) -> tuple[PortCheck, str]:
+        seen.append(timeout)
+        return PortCheck.OK, ""
+
+    MCRSession.connect("COM1", mcr_factory=fake_mcr_factory, port_checker=checker)
+    monkeypatch.setenv(ports.ENV_PORT_CHECK_TIMEOUT, "7.5")
+    MCRSession.connect("COM1", mcr_factory=fake_mcr_factory, port_checker=checker)
+    MCRSession.connect(
+        "COM1",
+        mcr_factory=fake_mcr_factory,
+        port_checker=checker,
+        port_check_timeout=3.0,
+    )
+    assert seen == [ports.DEFAULT_PORT_CHECK_TIMEOUT, 7.5, 3.0]
+
+
+def test_resolve_timeout_order_and_validation() -> None:
+    env = {ENV_TIMEOUT: "20"}
+    assert resolve_timeout(4.0, ENV_TIMEOUT, DEFAULT_CONNECT_TIMEOUT, env) == 4.0
+    assert resolve_timeout(None, ENV_TIMEOUT, DEFAULT_CONNECT_TIMEOUT, env) == 20.0
+    assert resolve_timeout(None, ENV_TIMEOUT, DEFAULT_CONNECT_TIMEOUT, {}) == 15.0
+    assert (
+        resolve_timeout(None, ENV_TIMEOUT, DEFAULT_CONNECT_TIMEOUT, {ENV_TIMEOUT: ""})
+        == 15.0
+    )
+    for bad in ["abc", "0", "-1", "inf", "nan"]:
+        with pytest.raises(MCRError) as info:
+            resolve_timeout(None, ENV_TIMEOUT, 15.0, {ENV_TIMEOUT: bad})
+        assert info.value.kind == "config"
+        assert ENV_TIMEOUT in info.value.message
+
+
+def test_invalid_env_timeout_fails_before_opening(
+    fake_mcr_factory: Callable[..., FakeMCR], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(ports.ENV_PORT_CHECK_TIMEOUT, "soon")
+    with pytest.raises(MCRError) as info:
+        connect(fake_mcr_factory)
+    assert info.value.kind == "config"
+    assert FakeMCR.instances == []
 
 
 def test_init_motors_without_home_disables_limits(

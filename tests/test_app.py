@@ -40,7 +40,7 @@ def shared_tcl_interpreter() -> Iterator[None]:
 
 def fake_connect(port: str, **kwargs: Any) -> MCRSession:
     return MCRSession.connect(
-        port, mcr_factory=FakeMCR, port_checker=lambda p: (PortCheck.OK, "")
+        port, mcr_factory=FakeMCR, port_checker=lambda p, t: (PortCheck.OK, "")
     )
 
 

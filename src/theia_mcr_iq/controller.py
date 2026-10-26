@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import math
+import os
 import sys
 import threading
 from collections.abc import Callable, Iterable, Mapping
@@ -25,6 +27,7 @@ ErrorKind = Literal[
     "port_unresponsive",
     "port_error",
     "timeout",
+    "config",
     "board_init",
     "no_board",
     "fw_read",
@@ -34,7 +37,8 @@ ErrorKind = Literal[
 ]
 CommunicationPath = Literal["UART", "I2C", "USB"]
 
-DEFAULT_CONNECT_TIMEOUT = 5.0
+ENV_TIMEOUT = "THEIA_MCR_TIMEOUT"
+DEFAULT_CONNECT_TIMEOUT = 15.0  # covers a slow port open plus board initialization
 
 _PRECHECK_KINDS: dict[ports.PortCheck, ErrorKind] = {
     ports.PortCheck.IN_USE: "port_in_use",
@@ -107,16 +111,25 @@ class MCRSession:
         cls,
         port: str,
         *,
-        timeout: float = DEFAULT_CONNECT_TIMEOUT,
+        timeout: float | None = None,
+        port_check_timeout: float | None = None,
         precheck: bool = True,
         debug: bool = False,
         log_files: bool = True,
         mcr_factory: Callable[..., Any] | None = None,
-        port_checker: Callable[[str], tuple[ports.PortCheck, str]] = ports.check_port,
+        port_checker: Callable[
+            [str, float], tuple[ports.PortCheck, str]
+        ] = ports.check_port,
     ) -> MCRSession:
         """Probe the port, construct the controller under a timeout, verify the board and read its identity."""
+        timeout = resolve_timeout(timeout, ENV_TIMEOUT, DEFAULT_CONNECT_TIMEOUT)
+        port_check_timeout = resolve_timeout(
+            port_check_timeout,
+            ports.ENV_PORT_CHECK_TIMEOUT,
+            ports.DEFAULT_PORT_CHECK_TIMEOUT,
+        )
         if precheck:
-            check, message = port_checker(port)
+            check, message = port_checker(port, port_check_timeout)
             if check is not ports.PortCheck.OK:
                 raise MCRError(_PRECHECK_KINDS.get(check, "port_error"), message)
 
@@ -299,6 +312,36 @@ class MCRSession:
         """Raise MCRError when a TheiaMCR move call returned a negative error code."""
         if isinstance(result, int) and result < 0:
             raise MCRError("move", f"{motor} {action} failed (code {result})")
+
+
+def parse_seconds(text: str) -> float:
+    """Parse a timeout given as text into a finite, positive number of seconds."""
+    try:
+        value = float(text)
+    except ValueError:
+        raise ValueError(f"'{text}' is not a number of seconds") from None
+    if not (math.isfinite(value) and value > 0):
+        raise ValueError(f"'{text}' is not a positive number of seconds")
+    return value
+
+
+def resolve_timeout(
+    explicit: float | None,
+    env_name: str,
+    default: float,
+    env: Mapping[str, str] | None = None,
+) -> float:
+    """Pick a timeout in seconds: the explicit value, then `$env_name`, then `default`."""
+    if explicit is not None:
+        return explicit
+    env = os.environ if env is None else env
+    from_env = env.get(env_name, "")
+    if not from_env:
+        return default
+    try:
+        return parse_seconds(from_env)
+    except ValueError as exc:
+        raise MCRError("config", f"Invalid ${env_name}: {exc}") from exc
 
 
 def _construct_with_timeout(
