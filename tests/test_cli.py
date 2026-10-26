@@ -29,7 +29,7 @@ def run(
         argv,
         mcr_factory=factory,
         port_lister=lambda: ONE_PORT if ports is None else ports,
-        port_checker=lambda p: (PortCheck.OK, ""),
+        port_checker=lambda p, t: (PortCheck.OK, ""),
     )
 
 
@@ -218,6 +218,55 @@ def test_env_lens_and_port(
     out = json.loads(capsys.readouterr().out)
     assert out["lens"] == "TL936_R6"
     assert mcr().port == "COM9"
+
+
+def test_port_check_timeout_flag_and_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[float] = []
+
+    def checker(port: str, timeout: float) -> tuple[PortCheck, str]:
+        seen.append(timeout)
+        return PortCheck.OK, ""
+
+    def info(*extra: str) -> int:
+        return cli.main(
+            ["info", *extra],
+            mcr_factory=FakeMCR,
+            port_lister=lambda: ONE_PORT,
+            port_checker=checker,
+        )
+
+    assert info() == 0
+    assert info("--port-check-timeout", "12") == 0
+    monkeypatch.setenv("THEIA_MCR_PORT_CHECK_TIMEOUT", "8")
+    assert info() == 0
+    assert seen == [10.0, 12.0, 8.0]
+
+
+def test_connect_timeout_flag(capsys: pytest.CaptureFixture[str]) -> None:
+    import threading
+
+    release = threading.Event()
+
+    def factory(port: str, **kwargs: Any) -> Any:
+        release.wait(5)
+        return object()
+
+    assert run(["info", "--timeout", "0.2"], factory=factory) == cli.EXIT_DEVICE
+    assert "timed out" in capsys.readouterr().err
+    release.set()
+
+
+def test_invalid_timeouts_are_usage_errors(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    for flag in ["--timeout", "--port-check-timeout"]:
+        with pytest.raises(SystemExit) as info:
+            run(["info", flag, "0"])
+        assert info.value.code == cli.EXIT_USAGE
+        assert "positive" in capsys.readouterr().err
+    monkeypatch.setenv("THEIA_MCR_TIMEOUT", "abc")
+    assert run(["info"]) == cli.EXIT_USAGE
+    assert "THEIA_MCR_TIMEOUT" in capsys.readouterr().err
 
 
 def test_version(capsys: pytest.CaptureFixture[str]) -> None:

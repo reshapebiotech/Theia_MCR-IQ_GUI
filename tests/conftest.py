@@ -18,6 +18,8 @@ def isolated_data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setenv(paths.ENV_DATA_DIR, str(data))
     monkeypatch.delenv("THEIA_MCR_PORT", raising=False)
     monkeypatch.delenv("THEIA_MCR_LENS", raising=False)
+    monkeypatch.delenv("THEIA_MCR_TIMEOUT", raising=False)
+    monkeypatch.delenv("THEIA_MCR_PORT_CHECK_TIMEOUT", raising=False)
     return data
 
 

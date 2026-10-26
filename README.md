@@ -34,9 +34,9 @@ chmod +x theia-mcr
 ./theia-mcr ports
 ```
 
-The first run pulls the image. From then on `./theia-mcr` takes the same commands and options as the native install, for example `./theia-mcr --lens TL410_R6 focus rel 100`. Removing the folder and the image (`docker image rm ghcr.io/reshapebiotech/theia-mcr-iq:4.0.0`) removes everything.
+The first run pulls the image. From then on `./theia-mcr` takes the same commands and options as the native install, for example `./theia-mcr --lens TL410_R6 focus rel 100`. Removing the folder and the image (`docker image rm ghcr.io/reshapebiotech/theia-mcr-iq:4.1.0`) removes everything.
 
-The wrapper runs `docker run --rm` with the host's `/dev` mounted and device cgroup rules for USB serial (major 188) and CDC-ACM (major 166) devices. A board plugged in after the image was pulled is visible at once, and the container does not need `--privileged`. It runs as root, so it needs no `dialout` membership, and it has no network. `~/.theia-mcr` is mounted as the data directory, so a `limits.json` override and a lens or port saved by the GUI are read. `THEIA_MCR_PORT` and `THEIA_MCR_LENS` pass through.
+The wrapper runs `docker run --rm` with the host's `/dev` mounted and device cgroup rules for USB serial (major 188) and CDC-ACM (major 166) devices. A board plugged in after the image was pulled is visible at once, and the container does not need `--privileged`. It runs as root, so it needs no `dialout` membership, and it has no network. `~/.theia-mcr` is mounted as the data directory, so a `limits.json` override and a lens or port saved by the GUI are read. `THEIA_MCR_PORT`, `THEIA_MCR_LENS`, `THEIA_MCR_TIMEOUT` and `THEIA_MCR_PORT_CHECK_TIMEOUT` pass through.
 
 | Variable | Meaning |
 |---|---|
@@ -44,7 +44,7 @@ The wrapper runs `docker run --rm` with the host's `/dev` mounted and device cgr
 | `THEIA_MCR_DATA_DIR` | Host folder mounted for settings and `limits.json`. Default `~/.theia-mcr`. |
 | `THEIA_MCR_PRIVILEGED` | Set to `1` to run with `--privileged` instead of the cgroup rules, for rootless Docker where the rules do not apply. |
 
-Offline hosts: copy `theia-mcr-iq-<version>-linux-<arch>.tar.gz` from the release page to the host next to the wrapper and run `docker load < theia-mcr-iq-4.0.0-linux-amd64.tar.gz`. It restores the tag the wrapper expects, so nothing else needs configuring. The wheel on the same page is for hosts with Python 3.11 or newer that do not want Docker.
+Offline hosts: copy `theia-mcr-iq-<version>-linux-<arch>.tar.gz` from the release page to the host next to the wrapper and run `docker load < theia-mcr-iq-4.1.0-linux-amd64.tar.gz`. It restores the tag the wrapper expects, so nothing else needs configuring. The wheel on the same page is for hosts with Python 3.11 or newer that do not want Docker.
 
 Serial passthrough only works when Docker runs on the Linux kernel that owns the USB device. Docker Desktop on macOS and Windows runs a virtual machine without USB serial access, so there only `ports`, `lenses` and `--help` are useful.
 
@@ -93,7 +93,8 @@ Options work before or after the command:
 | `--speed PPS` | Motor speed for this command. Default: the speed saved by the GUI. |
 | `--no-limits` | Allow absolute moves past the limit switch. |
 | `--no-backlash` | Skip backlash correction on relative moves. |
-| `--timeout S` | Connection timeout, default 5 seconds. |
+| `--timeout S` | Connection timeout. Default: `$THEIA_MCR_TIMEOUT`, then 15 seconds. |
+| `--port-check-timeout S` | How long the serial port may take to open before it is reported as unresponsive. Default: `$THEIA_MCR_PORT_CHECK_TIMEOUT`, then 10 seconds. Some boards take about 5 seconds to open. |
 | `--json` | Machine-readable result on stdout. Logs stay on stderr. |
 | `--quiet`, `--debug` | Log level. Default is INFO. |
 

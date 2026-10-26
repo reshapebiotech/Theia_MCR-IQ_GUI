@@ -15,6 +15,8 @@ import serial.tools.list_ports
 log = logging.getLogger(__name__)
 
 ENV_PORT = "THEIA_MCR_PORT"
+ENV_PORT_CHECK_TIMEOUT = "THEIA_MCR_PORT_CHECK_TIMEOUT"
+DEFAULT_PORT_CHECK_TIMEOUT = 10.0  # some FT200X boards take ~5 s to open
 USB_HWID_MARKER = (
     "USB VID:PID"  # pyserial puts this in hwid for every USB serial adapter
 )
@@ -71,7 +73,9 @@ def is_in_use_message(message: str) -> bool:
     return any(marker in lowered for marker in _IN_USE_MARKERS)
 
 
-def check_port(port: str, timeout: float = 2.0) -> tuple[PortCheck, str]:
+def check_port(
+    port: str, timeout: float = DEFAULT_PORT_CHECK_TIMEOUT
+) -> tuple[PortCheck, str]:
     """Briefly open `port` in a worker thread; classify failure and treat a hang as unresponsive."""
     outcome: dict[str, object] = {"check": PortCheck.ERROR, "message": ""}
 
